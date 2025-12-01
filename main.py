@@ -1,4 +1,5 @@
 import pygame
+import random
 
 # Initialize pygame
 pygame.init()
@@ -37,6 +38,7 @@ game_over = False
 winner = None
 game_mode = None  # Will be "1P" or "2P"
 game_state = "menu"  # Can be "menu" or "playing"
+ai_player = "O"  # AI always plays as O
 
 def draw_grid():
     """
@@ -53,7 +55,7 @@ def draw_grid():
     
     # Draw horizontal lines
     for i in range(1, 3):
-        pygame.draw.line(screen, LINE_COLOR, 
+        pygame.draw. line(screen, LINE_COLOR, 
                         (0, i * CELL_SIZE), 
                         (WINDOW_SIZE, i * CELL_SIZE), 
                         LINE_WIDTH)
@@ -152,6 +154,96 @@ def check_winner(board):
     # Game still ongoing
     return None
 
+def ordinateur(board, signe):
+    """
+    AI function that determines where the computer should play
+    
+    Parameters:
+    - board: list of 9 elements containing "", "X", or "O"
+    "" = nobody played here
+    "X" = cross at this position
+    "O" = circle at this position
+    - signe: str, the symbol played by AI ("X" or "O")
+    
+    Returns:
+    - int: position where AI wants to play (0-8)
+    - False: in case of error
+    
+    Strategy:
+    1. Try to win if possible
+    2. Block opponent from winning
+    3. Take center if available
+    4. Take a corner if available
+    5. Take any remaining spot
+    """
+    # Input validation
+    if not isinstance(board, list) or len(board) != 9:
+        print("Error: board must be a list of 9 elements")
+        return False
+    
+    if signe not in ["X", "O"]:
+        print("Error: signe must be 'X' or 'O'")
+        return False
+    
+    # Determine opponent's sign
+    opponent = "O" if signe == "X" else "X"
+    
+    # All possible winning combinations
+    winning_combinations = [
+        [0, 1, 2],  # Top row
+        [3, 4, 5],  # Middle row
+        [6, 7, 8],  # Bottom row
+        [0, 3, 6],  # Left column
+        [1, 4, 7],  # Middle column
+        [2, 5, 8],  # Right column
+        [0, 4, 8],  # Diagonal top-left to bottom-right
+        [2, 4, 6]   # Diagonal top-right to bottom-left
+    ]
+    
+    # Strategy 1: Try to WIN
+    for combo in winning_combinations:
+        positions = [board[combo[0]], board[combo[1]], board[combo[2]]]
+        # If AI has 2 in a row and third is empty, TAKE IT! 
+        if positions.count(signe) == 2 and positions.count("") == 1:
+            for i in combo:
+                if board[i] == "":
+                    print(f"AI: Winning move at position {i}")
+                    return i
+    
+    # Strategy 2: BLOCK opponent from winning
+    for combo in winning_combinations:
+        positions = [board[combo[0]], board[combo[1]], board[combo[2]]]
+        # If opponent has 2 in a row and third is empty, BLOCK IT!
+        if positions.count(opponent) == 2 and positions.count("") == 1:
+            for i in combo:
+                if board[i] == "":
+                    print(f"AI: Blocking opponent at position {i}")
+                    return i
+    
+    # Strategy 3: Take CENTER (position 4) if available
+    if board[4] == "":
+        print("AI: Taking center (position 4)")
+        return 4
+    
+    # Strategy 4: Take a CORNER if available
+    corners = [0, 2, 6, 8]
+    available_corners = [pos for pos in corners if board[pos] == ""]
+    if available_corners:
+        chosen = random.choice(available_corners)
+        print(f"AI: Taking corner at position {chosen}")
+        return chosen
+    
+    # Strategy 5: Take any REMAINING spot
+    available_positions = [i for i in range(9) if board[i] == ""]
+    if available_positions:
+        chosen = random.choice(available_positions)
+        print(f"AI: Taking remaining position {chosen}")
+        return chosen
+    
+    # No available positions (should not happen in normal game)
+    print("Error: No available positions on board")
+    return False
+
 def draw_winner_message():
     """
     Display winner message and restart button
@@ -170,13 +262,20 @@ def draw_winner_message():
     if winner == "Draw":
         text = font_large.render("Draw!", True, BLACK)
     else:
-        text = font_large.render(f"{winner} Wins!", True, DARK_GREEN)
+        # Display different message for AI vs Human
+        if game_mode == "1P":
+            if winner == "X":
+                text = font_large.render("You Win!", True, DARK_GREEN)
+            else:
+                text = font_large.render("AI Wins!", True, RED)
+        else:
+            text = font_large.render(f"{winner} Wins!", True, DARK_GREEN)
     
     text_rect = text.get_rect(center=(WINDOW_SIZE // 2, WINDOW_SIZE // 2 - 80))
     screen.blit(text, text_rect)
     
     # Restart button
-    restart_button_rect = pygame. Rect(150, 300, 300, 70)
+    restart_button_rect = pygame.Rect(150, 300, 300, 70)
     pygame.draw.rect(screen, GREEN, restart_button_rect)
     pygame.draw.rect(screen, BLACK, restart_button_rect, 3)  # Border
     
@@ -200,7 +299,7 @@ def draw_menu():
     Draw the main menu with 1 Player and 2 Players buttons
     
     Returns:
-    - one_player_button: pygame.Rect for 1 player button
+    - one_player_button: pygame. Rect for 1 player button
     - two_players_button: pygame.Rect for 2 players button
     """
     screen.fill(BG_COLOR)
@@ -229,7 +328,7 @@ def draw_menu():
     screen.blit(two_players_text, two_players_text_rect)
     
     # Subtitle
-    subtitle = font_small. render("Choose your mode", True, GRAY)
+    subtitle = font_small.render("Choose your mode", True, GRAY)
     subtitle_rect = subtitle.get_rect(center=(WINDOW_SIZE // 2, 480))
     screen.blit(subtitle, subtitle_rect)
     
@@ -265,6 +364,7 @@ restart_button_rect = None
 menu_button_rect = None
 one_player_button = None
 two_players_button = None
+ai_thinking = False  # To prevent multiple AI moves
 
 while running:
     # Event handling
@@ -297,8 +397,8 @@ while running:
                     elif menu_button_rect and menu_button_rect.collidepoint(mouse_pos):
                         return_to_menu()
                 
-                # Regular game play
-                else:
+                # Regular game play (only if it's human's turn)
+                elif not ai_thinking:
                     # Get cell index from mouse click
                     cell_index = get_cell_from_mouse(mouse_pos)
                     
@@ -317,9 +417,40 @@ while running:
                         else:
                             # Switch player
                             current_player = "O" if current_player == "X" else "X"
-                            
-                            # TODO: If 1P mode and current_player is O, call AI
-                            # Will be implemented in Step 4
+    
+    # AI logic (runs every frame, but only acts when it's AI's turn)
+    if (game_state == "playing" and 
+        not game_over and 
+        game_mode == "1P" and 
+        current_player == ai_player and 
+        not ai_thinking):
+        
+        ai_thinking = True  # Prevent multiple calls
+        
+        # Small delay to make AI feel more natural
+        pygame.time.wait(700)  # 700ms delay
+        
+        # Call the AI function
+        ai_move = ordinateur(board, ai_player)
+        
+        if ai_move is not False and 0 <= ai_move <= 8 and board[ai_move] == "":
+            board[ai_move] = ai_player
+            print(f"AI played at position {ai_move}")
+            print(f"Board: {board}")
+            
+            # Check for winner
+            result = check_winner(board)
+            if result:
+                game_over = True
+                winner = result
+                print(f"Game Over! Winner: {winner}")
+            else:
+                # Switch back to human player
+                current_player = "X"
+        else:
+            print(f"Error: AI returned invalid move {ai_move}")
+        
+        ai_thinking = False
     
     # Drawing based on game state
     if game_state == "menu":
