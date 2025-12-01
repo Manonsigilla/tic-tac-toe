@@ -1,10 +1,11 @@
 import pygame
 import random
+import os
 
 # Initialize pygame
 pygame.init()
 
-# Constants (in English as requested)
+# Constants and configurations
 WINDOW_SIZE = 600
 CELL_SIZE = WINDOW_SIZE // 3  # Each cell is 200x200
 LINE_COLOR = (0, 0, 0)  # Black
@@ -23,13 +24,31 @@ WHITE = (255, 255, 255)
 
 # Initialize window
 screen = pygame.display.set_mode((WINDOW_SIZE, WINDOW_SIZE))
-pygame.display.set_caption("Tic Tac Toe")
+pygame. display.set_caption("Tic Tac Toe - Belgium vs France")
 clock = pygame.time.Clock()
 
 # Font for text
 font_large = pygame.font.Font(None, 74)
 font_medium = pygame.font.Font(None, 60)
 font_small = pygame.font.Font(None, 50)
+
+# Load images
+try:
+    # Load beer image (for X / Human player)
+    beer_img = pygame.image.load(os.path.join("assets", "images", "beer.png"))
+    beer_img = pygame.transform.scale(beer_img, (120, 120))  # Resize to fit cell
+    
+    # Load wine image (for O / AI player)
+    wine_img = pygame.image.load(os.path.join("assets", "images", "wine.png"))
+    wine_img = pygame.transform.scale(wine_img, (120, 120))  # Resize to fit cell
+    
+    print("✅ Images loaded successfully!")
+    use_images = True
+    
+except Exception as e:
+    print(f"⚠️ Error loading images: {e}")
+    print("Falling back to default X and O symbols")
+    use_images = False
 
 # Game state variables
 board = [""] * 9
@@ -55,7 +74,7 @@ def draw_grid():
     
     # Draw horizontal lines
     for i in range(1, 3):
-        pygame.draw. line(screen, LINE_COLOR, 
+        pygame.draw.line(screen, LINE_COLOR, 
                         (0, i * CELL_SIZE), 
                         (WINDOW_SIZE, i * CELL_SIZE), 
                         LINE_WIDTH)
@@ -85,7 +104,7 @@ def get_cell_from_mouse(pos):
 
 def draw_symbols():
     """
-    Draw X and O symbols on the board based on current board state
+    Draw X and O symbols (or images) on the board based on current board state
     """
     for i in range(9):
         if board[i] != "":
@@ -95,26 +114,40 @@ def draw_symbols():
             center_x = col * CELL_SIZE + CELL_SIZE // 2
             center_y = row * CELL_SIZE + CELL_SIZE // 2
             
-            if board[i] == "O":
-                # Draw circle (O)
-                pygame.draw.circle(screen, RED, 
-                (center_x, center_y), 
-                CELL_SIZE // 3, 
-                LINE_WIDTH)
+            if use_images:
+                # Draw images
+                if board[i] == "X":
+                    # Beer image for X
+                    img_rect = beer_img.get_rect(center=(center_x, center_y))
+                    screen.blit(beer_img, img_rect)
+                
+                elif board[i] == "O":
+                    # Wine image for O
+                    img_rect = wine_img.get_rect(center=(center_x, center_y))
+                    screen.blit(wine_img, img_rect)
             
-            elif board[i] == "X":
-                # Draw cross (X) - two diagonal lines
-                offset = CELL_SIZE // 3
-                # Line from top-left to bottom-right
-                pygame.draw.line(screen, BLUE,
-                (center_x - offset, center_y - offset),
-                (center_x + offset, center_y + offset),
-                LINE_WIDTH)
-                # Line from top-right to bottom-left
-                pygame.draw.line(screen, BLUE,
-                (center_x + offset, center_y - offset),
-                (center_x - offset, center_y + offset),
-                LINE_WIDTH)
+            else:
+                # Fallback to default shapes if images not loaded
+                if board[i] == "O":
+                    # Draw circle (O)
+                    pygame.draw.circle(screen, RED, 
+                    (center_x, center_y), 
+                    CELL_SIZE // 3, 
+                    LINE_WIDTH)
+                
+                elif board[i] == "X":
+                    # Draw cross (X) - two diagonal lines
+                    offset = CELL_SIZE // 3
+                    # Line from top-left to bottom-right
+                    pygame.draw.line(screen, BLUE,
+                    (center_x - offset, center_y - offset),
+                    (center_x + offset, center_y + offset),
+                    LINE_WIDTH)
+                    # Line from top-right to bottom-left
+                    pygame.draw.line(screen, BLUE,
+                    (center_x + offset, center_y - offset),
+                    (center_x - offset, center_y + offset),
+                    LINE_WIDTH)
 
 def check_winner(board):
     """
@@ -260,22 +293,25 @@ def draw_winner_message():
     
     # Winner text
     if winner == "Draw":
-        text = font_large.render("Draw!", True, BLACK)
+        text = font_small.render("You have the same brain", True, BLACK)
     else:
         # Display different message for AI vs Human
         if game_mode == "1P":
             if winner == "X":
-                text = font_large.render("You Win!", True, DARK_GREEN)
+                text = font_large.render("Belgium Wins!  🍺", True, DARK_GREEN)
             else:
-                text = font_large.render("AI Wins!", True, RED)
+                text = font_large. render("France Wins! 🍷", True, RED)
         else:
-            text = font_large.render(f"{winner} Wins!", True, DARK_GREEN)
+            if winner == "X":
+                text = font_large.render("Belgium Wins! 🍺", True, DARK_GREEN)
+            else:
+                text = font_large.render("France Wins! 🍷", True, RED)
     
     text_rect = text.get_rect(center=(WINDOW_SIZE // 2, WINDOW_SIZE // 2 - 80))
     screen.blit(text, text_rect)
     
     # Restart button
-    restart_button_rect = pygame.Rect(150, 300, 300, 70)
+    restart_button_rect = pygame. Rect(150, 300, 300, 70)
     pygame.draw.rect(screen, GREEN, restart_button_rect)
     pygame.draw.rect(screen, BLACK, restart_button_rect, 3)  # Border
     
@@ -284,12 +320,12 @@ def draw_winner_message():
     screen.blit(restart_text, restart_text_rect)
     
     # Menu button
-    menu_button_rect = pygame.Rect(150, 390, 300, 70)
+    menu_button_rect = pygame. Rect(150, 390, 300, 70)
     pygame.draw.rect(screen, GRAY, menu_button_rect)
     pygame.draw.rect(screen, BLACK, menu_button_rect, 3)  # Border
     
     menu_text = font_small.render("Menu", True, BLACK)
-    menu_text_rect = menu_text.get_rect(center=menu_button_rect.center)
+    menu_text_rect = menu_text. get_rect(center=menu_button_rect.center)
     screen.blit(menu_text, menu_text_rect)
     
     return restart_button_rect, menu_button_rect
@@ -299,7 +335,7 @@ def draw_menu():
     Draw the main menu with 1 Player and 2 Players buttons
     
     Returns:
-    - one_player_button: pygame. Rect for 1 player button
+    - one_player_button: pygame.Rect for 1 player button
     - two_players_button: pygame.Rect for 2 players button
     """
     screen.fill(BG_COLOR)
@@ -427,7 +463,7 @@ while running:
         
         ai_thinking = True  # Prevent multiple calls
         
-        # Small delay to make AI feel more natural
+        # Small delay to make AI feel more natural (optional)
         pygame.time.wait(700)  # 700ms delay
         
         # Call the AI function
