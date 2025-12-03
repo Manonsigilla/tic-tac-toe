@@ -1,6 +1,8 @@
 import pygame
 import random
 import os
+import json
+from datetime import datetime
 
 # Initialize pygame
 pygame.init()
@@ -119,6 +121,7 @@ game_state = "menu"  # Can be "menu" or "playing"
 ai_player = "O"  # AI always plays as O
 ai_move_time = 0  # To manage AI move timing
 ai_delay = 1200  # milliseconds delay before AI plays
+winner_recorded = False  # To ensure we record the winner only once
 
 def play_sound(sound):
     """
@@ -372,6 +375,13 @@ def draw_winner_message():
     - restart_button_rect: pygame.Rect for the restart button
     - menu_button_rect: pygame. Rect for the menu button
     """
+    global winner_recorded
+    
+    # Record game result only once
+    if not winner_recorded:
+        record_game_result(winner)
+        winner_recorded = True
+    
     # Semi-transparent overlay
     overlay = pygame.Surface((WINDOW_SIZE, WINDOW_SIZE))
     overlay.set_alpha(200)  # Transparency
@@ -420,7 +430,7 @@ def draw_winner_message():
     # Menu button
     menu_button_rect = pygame. Rect(150, 390, 300, 70)
     pygame.draw.rect(screen, LIGHT_GRAY, menu_button_rect, border_radius=12)
-    pygame.draw.rect(screen, DARK_NAVY, menu_button_rect, 3)  # Border
+    pygame.draw.rect(screen, DARK_NAVY, menu_button_rect, 3, border_radius=12)  # Border
     
     menu_text = font_small.render("Menu", True, DARK_NAVY)
     menu_text_rect = menu_text. get_rect(center=menu_button_rect.center)
@@ -440,11 +450,20 @@ def draw_menu():
     
     # Title
     title = font_large.render("TIC TAC TOE", True, BLACK)
-    title_rect = title.get_rect(center=(WINDOW_SIZE // 2, 100))
+    title_rect = title.get_rect(center=(WINDOW_SIZE // 2, 80))
     screen.blit(title, title_rect)
     
+    # Stats button
+    stats_button = pygame.Rect(200, 160, 200, 60)
+    pygame.draw.rect(screen, LIGHT_GRAY, stats_button, border_radius=12)
+    pygame.draw.rect(screen, DARK_NAVY, stats_button, 3, border_radius=12)  # Border
+    
+    stats_text = font_small.render("Stats", True, DARK_NAVY)
+    stats_text_rect = stats_text.get_rect(center=stats_button.center)
+    screen.blit(stats_text, stats_text_rect)
+    
     # 1 Player button
-    one_player_button = pygame.Rect(150, 220, 300, 80)
+    one_player_button = pygame.Rect(150, 250, 300, 80)
     pygame.draw.rect(screen, PRIMARY_GREEN, one_player_button, border_radius=15)
     pygame.draw.rect(screen, DARK_NAVY, one_player_button, 3, border_radius=15)
     
@@ -453,7 +472,7 @@ def draw_menu():
     screen.blit(one_player_text, one_player_text_rect)
     
     # 2 Players button
-    two_players_button = pygame.Rect(150, 340, 300, 80)
+    two_players_button = pygame.Rect(150, 360, 300, 80)
     pygame.draw.rect(screen, PRIMARY_BLUE, two_players_button, border_radius=15)
     pygame.draw.rect(screen, DARK_NAVY, two_players_button, 3, border_radius=15)
     
@@ -461,22 +480,18 @@ def draw_menu():
     two_players_text_rect = two_players_text.get_rect(center=two_players_button.center)
     screen.blit(two_players_text, two_players_text_rect)
     
-    # Subtitle
-    subtitle = font_small.render("Choose your mode", True, GRAY)
-    subtitle_rect = subtitle.get_rect(center=(WINDOW_SIZE // 2, 480))
-    screen.blit(subtitle, subtitle_rect)
-    
-    return one_player_button, two_players_button
+    return one_player_button, two_players_button, stats_button
 
 def reset_game():
     """
     Reset the game to initial state (keep same mode)
     """
-    global board, current_player, game_over, winner
+    global board, current_player, game_over, winner, winner_recorded
     board = [""] * 9
     current_player = "X"
     game_over = False
     winner = None
+    winner_recorded = False
     print("Game reset!")
 
 def return_to_menu():
@@ -655,12 +670,302 @@ def update_volumes():
         if click_sound:
             click_sound.set_volume(actual_sfx_volume)
 
+def load_stats():
+    """
+    Load game statistics from JSON file
+    
+    Returns:
+    - dict: Statistics dictionary with game history
+    """
+    default_stats = {
+        'belgium_wins': 0,      # X wins
+        'france_wins': 0,       # O wins
+        'draws': 0,
+        'total_games': 0,
+        'last_played': None
+    }
+    
+    try:
+        if os.path.exists('stats. json'):
+            with open('stats.json', 'r') as f:
+                stats = json.load(f)
+                print("✅ Stats loaded successfully!")
+                return stats
+        else:
+            print("📊 No stats file found, creating new one")
+            return default_stats
+    except Exception as e:
+        print(f"⚠️ Error loading stats: {e}")
+        return default_stats
+
+def save_stats(stats):
+    """
+    Save game statistics to JSON file
+    
+    Parameters:
+    - stats: dict containing game statistics
+    """
+    try:
+        with open('stats.json', 'w') as f:
+            json.dump(stats, f, indent=4)
+        print("✅ Stats saved successfully!")
+    except Exception as e:
+        print(f"⚠️ Error saving stats: {e}")
+
+def record_game_result(winner_symbol):
+    """
+    Record the result of a game and update statistics
+    
+    Parameters:
+    - winner_symbol: "X", "O", or "Draw"
+    """
+    global game_stats
+    
+    if winner_symbol == "X":
+        game_stats['belgium_wins'] += 1
+    elif winner_symbol == "O":
+        game_stats['france_wins'] += 1
+    elif winner_symbol == "Draw":
+        game_stats['draws'] += 1
+    
+    game_stats['total_games'] += 1
+    game_stats['last_played'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    save_stats(game_stats)
+    print(f"📊 Game recorded: {winner_symbol}")
+
+def draw_pie_chart(center_x, center_y, radius, belgium_wins, france_wins, draws):
+    """
+    Draw a pie chart showing win distribution
+    
+    Parameters:
+    - center_x, center_y: Center position of the pie chart
+    - radius: Radius of the pie chart
+    - belgium_wins, france_wins, draws: Number of wins for each category
+    """
+    total = belgium_wins + france_wins + draws
+    
+    if total == 0:
+        # Draw empty circle if no games played
+        pygame.draw.circle(screen, LIGHT_GRAY, (center_x, center_y), radius)
+        pygame.draw.circle(screen, DARK_NAVY, (center_x, center_y), radius, 3) # Border
+        
+        # "No data" text
+        small_font = pygame.font.Font(None, 32)
+        no_data_text1 = small_font.render("No", True, DARK_GRAY)
+        no_data_text2 = small_font.render("games", True, DARK_GRAY)
+        
+        no_data_rect1 = no_data_text1.get_rect(center=(center_x, center_y - 12))
+        no_data_rect2 = no_data_text2.get_rect(center=(center_x, center_y + 12))
+        
+        screen.blit(no_data_text1, no_data_rect1)
+        screen.blit(no_data_text2, no_data_rect2)
+        return
+    
+    # Calculate percentages and angles
+    belgium_percent = belgium_wins / total
+    france_percent = france_wins / total
+    draws_percent = draws / total
+    
+    belgium_angle = belgium_percent * 360
+    france_angle = france_percent * 360
+    draws_angle = draws_percent * 360
+    
+    # Draw pie slices
+    import math
+    
+    # Belgium slice (starting at top, going clockwise)
+    start_angle = -90  # Start at top
+    if belgium_wins > 0:
+        end_angle = start_angle + belgium_angle
+        draw_pie_slice(center_x, center_y, radius, start_angle, end_angle, ACCENT_RED)
+        start_angle = end_angle
+    
+    # France slice
+    if france_wins > 0:
+        end_angle = start_angle + france_angle
+        draw_pie_slice(center_x, center_y, radius, start_angle, end_angle, PRIMARY_BLUE)
+        start_angle = end_angle
+    
+    # Draw slice
+    if draws > 0:
+        end_angle = start_angle + draws_angle
+        draw_pie_slice(center_x, center_y, radius, start_angle, end_angle, LIGHT_GRAY)
+    
+    # Draw border
+    pygame.draw.circle(screen, DARK_NAVY, (center_x, center_y), radius, 3)
+
+def draw_pie_slice(center_x, center_y, radius, start_angle, end_angle, color):
+    """
+    Draw a single slice of a pie chart
+    
+    Parameters:
+    - center_x, center_y: Center of the pie
+    - radius: Radius of the pie
+    - start_angle, end_angle: Angles in degrees
+    - color: RGB color tuple
+    """
+    import math
+    
+    # Convert angles to radians
+    start_rad = math.radians(start_angle)
+    end_rad = math.radians(end_angle)
+    
+    # Create points for the polygon
+    points = [(center_x, center_y)]
+    
+    # Number of segments for smooth curve
+    num_segments = max(2, int(abs(end_angle - start_angle)))
+    
+    for i in range(num_segments + 1):
+        angle = start_rad + (end_rad - start_rad) * i / num_segments
+        x = center_x + radius * math.cos(angle)
+        y = center_y + radius * math.sin(angle)
+        points.append((x, y))
+    
+    # Draw filled polygon
+    if len(points) >= 3:
+        pygame.draw.polygon(screen, color, points)
+
+def draw_stats_screen():
+    """
+    Draw the statistics screen with game history and pie chart
+    
+    Returns:
+    - back_button_rect: pygame.Rect for the back button
+    - reset_stats_button_rect: pygame. Rect for reset stats button
+    """
+    # Gradient background
+    draw_gradient_background()
+    
+    # Title
+    title = font_large.render("Statistics", True, DARK_NAVY)
+    title_rect = title.get_rect(center=(WINDOW_SIZE // 2, 50))
+    screen.blit(title, title_rect)
+    
+    # Stats panel
+    panel_rect = pygame.Rect(50, 100, 500, 400)
+    panel_surface = pygame.Surface((500, 400))
+    panel_surface.set_alpha(220)
+    panel_surface.fill(WHITE)
+    screen.blit(panel_surface, (50, 100))
+    pygame.draw.rect(screen, DARK_NAVY, panel_rect, 3, border_radius=15)
+    
+    # Left side: Text stats
+    y_offset = 130
+    
+    # Belgium wins
+    belgium_text = font_small.render(f"Belgium Wins: {game_stats['belgium_wins']}", True, ACCENT_RED)
+    screen.blit(belgium_text, (80, y_offset))
+    y_offset += 50
+    
+    # France wins
+    france_text = font_small.render(f"France Wins: {game_stats['france_wins']}", True, PRIMARY_BLUE)
+    screen.blit(france_text, (80, y_offset))
+    y_offset += 50
+    
+    # Draws
+    draws_text = font_small.render(f"Draws: {game_stats['draws']}", True, DARK_GRAY)
+    screen. blit(draws_text, (80, y_offset))
+    y_offset += 50
+    
+    # Total games
+    total_text = font_small.render(f"Total Games: {game_stats['total_games']}", True, DARK_NAVY)
+    screen.blit(total_text, (80, y_offset))
+    y_offset += 50
+    
+    # Last played
+    if game_stats['last_played']:
+        last_played_text = font_small.render(f"Last Played:", True, DARK_GRAY)
+        screen. blit(last_played_text, (80, y_offset))
+        y_offset += 40
+        
+        # Date on second line (smaller font)
+        date_font = pygame.font.Font(None, 35)
+        date_text = date_font.render(game_stats['last_played'], True, DARK_GRAY)
+        screen.blit(date_text, (80, y_offset))
+    
+    # Right side: Pie chart
+    pie_center_x = 420
+    pie_center_y = 280
+    pie_radius = 80
+    
+    draw_pie_chart(pie_center_x, pie_center_y, pie_radius, 
+    game_stats['belgium_wins'], 
+    game_stats['france_wins'], 
+    game_stats['draws'])
+    
+    # Legend for pie chart (vertical layout)
+    legend_x = 350
+    legend_y = 385
+    legend_font = pygame.font.Font(None, 28)
+    letter_spacing = 30
+    
+    # Belgium legend
+    pygame.draw.circle(screen, ACCENT_RED, (legend_x, legend_y), 8)
+    legend_text = legend_font.render("Belgium", True, DARK_NAVY)
+    screen.blit(legend_text, (legend_x + 15, legend_y - 10))
+    
+    # France legend
+    legend_y += letter_spacing
+    pygame.draw.circle(screen, PRIMARY_BLUE, (legend_x, legend_y), 8)
+    legend_text = legend_font.render("France", True, DARK_NAVY)
+    screen.blit(legend_text, (legend_x + 15, legend_y - 10))
+    
+    # Draw legend (if there are draws)
+    if game_stats['draws'] > 0:
+        legend_y += letter_spacing
+        pygame.draw.circle(screen, LIGHT_GRAY, (legend_x, legend_y), 8)
+        legend_text = legend_font.render("Draws", True, DARK_NAVY)
+        screen.blit(legend_text, (legend_x + 15, legend_y - 10))
+    
+    # Back button
+    back_button_rect = pygame.Rect(100, 520, 180, 60)
+    pygame.draw.rect(screen, PRIMARY_BLUE, back_button_rect, border_radius=12)
+    pygame.draw.rect(screen, DARK_NAVY, back_button_rect, 3, border_radius=12)
+    
+    back_text = font_small.render("Back", True, WHITE)
+    back_text_rect = back_text.get_rect(center=back_button_rect.center)
+    screen.blit(back_text, back_text_rect)
+    
+    # Reset stats button
+    reset_stats_button_rect = pygame.Rect(320, 520, 180, 60)
+    pygame.draw. rect(screen, ACCENT_RED, reset_stats_button_rect, border_radius=12)
+    pygame.draw.rect(screen, DARK_NAVY, reset_stats_button_rect, 3, border_radius=12)
+    
+    reset_text = font_small.render("Reset", True, WHITE)
+    reset_text_rect = reset_text.get_rect(center=reset_stats_button_rect.center)
+    screen.blit(reset_text, reset_text_rect)
+    
+    return back_button_rect, reset_stats_button_rect
+
+def reset_stats():
+    """
+    Reset all statistics to zero
+    """
+    global game_stats
+    game_stats = {
+        'belgium_wins': 0,
+        'france_wins': 0,
+        'draws': 0,
+        'total_games': 0,
+        'last_played': None
+    }
+    save_stats(game_stats)
+    print("📊 Stats reset!")
+
+# Load game statistics
+game_stats = load_stats()
+
 # Main game loop
 running = True
 restart_button_rect = None
 menu_button_rect = None
 one_player_button = None
 two_players_button = None
+stats_button = None
+back_button_rect = None
+reset_stats_button_rect = None
 ai_thinking = False  # To prevent multiple AI moves
 settings_button_rect = None
 settings_rects = {}
@@ -738,6 +1043,11 @@ while running:
                     game_mode = "2P"
                     game_state = "playing"
                     print("2 Players mode selected")
+                    
+                elif stats_button and stats_button.collidepoint(mouse_pos):
+                    play_sound(click_sound) # Play click sound
+                    game_state = "stats"
+                    print("Statistics screen opened")
             
             # Playing state
             elif game_state == "playing":
@@ -778,7 +1088,17 @@ while running:
                         else:
                             # Switch player
                             current_player = "O" if current_player == "X" else "X"
-    
+            elif game_state == "stats":
+                if back_button_rect and back_button_rect.collidepoint(mouse_pos):
+                    play_sound(click_sound) # Play click sound
+                    game_state = "menu"
+                    print("Returned to menu from stats")
+                
+                elif reset_stats_button_rect and reset_stats_button_rect.collidepoint(mouse_pos):
+                    play_sound(click_sound) # Play click sound
+                    reset_stats()
+                    print("Statistics has been reset")
+            
         if event.type == pygame.MOUSEBUTTONUP:
             dragging_music_slider = False
             dragging_sfx_slider = False
@@ -841,9 +1161,13 @@ while running:
     
     # Drawing based on game state
     if game_state == "menu":
-        one_player_button, two_players_button = draw_menu()
+        one_player_button, two_players_button, stats_button = draw_menu()
         settings_button_rect = draw_settings_button()
     
+    elif game_state == "stats":
+        back_button_rect, reset_stats_button_rect = draw_stats_screen()
+        settings_button_rect = draw_settings_button()
+        
     elif game_state == "playing":
         draw_grid()
         draw_symbols()
