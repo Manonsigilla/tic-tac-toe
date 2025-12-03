@@ -13,17 +13,33 @@ WINDOW_SIZE = 600
 CELL_SIZE = WINDOW_SIZE // 3  # Each cell is 200x200
 LINE_COLOR = (0, 0, 0)  # Black
 BG_COLOR = (255, 255, 255)  # White
-LINE_WIDTH = 5
+LINE_WIDTH = 3
 FPS = 60
 
-# Colors
-RED = (255, 0, 0)
-BLUE = (0, 0, 255)
-GREEN = (0, 200, 0)
-GRAY = (200, 200, 200)
-BLACK = (0, 0, 0)
-DARK_GREEN = (0, 150, 0)
-WHITE = (255, 255, 255)
+# Colors - Pastel Dream Palette
+# Gradient background colors
+GRADIENT_TOP = (255, 190, 152)      # Peach (Belgium side)
+GRADIENT_BOTTOM = (168, 218, 220)   # Powder blue (France side)
+
+# UI colors
+PRIMARY_GREEN = (129, 236, 236)     # Turquoise (active buttons)
+PRIMARY_BLUE = (116, 185, 255)      # Sky blue (2 players button)
+ACCENT_RED = (250, 127, 111)        # Salmon (France wins)
+ACCENT_GOLD = (253, 203, 110)       # Butter yellow (Belgium wins)
+DARK_NAVY = (52, 73, 94)            # Midnight blue (main text)
+LIGHT_GRAY = (236, 240, 241)        # Clouds (backgrounds)
+WHITE = (252, 252, 252)             # Almost white
+DARK_GRAY = (127, 140, 141)         # Asphalt (secondary text)
+
+# Legacy color names (for compatibility)
+BLACK = DARK_NAVY
+BG_COLOR = WHITE
+LINE_COLOR = DARK_NAVY
+RED = ACCENT_RED
+BLUE = PRIMARY_BLUE
+GREEN = PRIMARY_GREEN
+GRAY = LIGHT_GRAY
+DARK_GREEN = ACCENT_GOLD
 
 # Initialize window
 screen = pygame.display.set_mode((WINDOW_SIZE, WINDOW_SIZE))
@@ -114,11 +130,27 @@ def play_sound(sound):
     if use_sounds and sound and sfx_enabled:
         sound.play()
 
+def draw_gradient_background():
+    """
+    Draw a vertical gradient background from GRADIENT_TOP to GRADIENT_BOTTOM
+    """
+    for y in range(WINDOW_SIZE):
+        # Calculate the ratio (0.0 to 1.0)
+        ratio = y / WINDOW_SIZE
+        
+        # Interpolate between top and bottom colors
+        r = int(GRADIENT_TOP[0] * (1 - ratio) + GRADIENT_BOTTOM[0] * ratio)
+        g = int(GRADIENT_TOP[1] * (1 - ratio) + GRADIENT_BOTTOM[1] * ratio)
+        b = int(GRADIENT_TOP[2] * (1 - ratio) + GRADIENT_BOTTOM[2] * ratio)
+        
+        # Draw a horizontal line for this y position
+        pygame.draw.line(screen, (r, g, b), (0, y), (WINDOW_SIZE, y))
+
 def draw_grid():
     """
-    Draw the 3x3 grid on the screen
+    Draw the 3x3 grid on the screen with gradient background
     """
-    screen.fill(BG_COLOR)
+    draw_gradient_background()
     
     # Draw vertical lines
     for i in range(1, 3):
@@ -355,7 +387,7 @@ def draw_winner_message():
         # Display different message with icons
         if winner == "X":
             # Belgium wins - show text + beer image
-            text = font_large.render("Belgium Wins!", True, DARK_GREEN)
+            text = font_large.render("Belgium Wins!", True, ACCENT_GOLD)
             text_rect = text.get_rect(center=(WINDOW_SIZE // 2, WINDOW_SIZE // 2 - 80))
             screen.blit(text, text_rect)
             
@@ -366,7 +398,7 @@ def draw_winner_message():
                 screen.blit(beer_display, beer_rect)
         else:
             # France wins - show text + wine image
-            text = font_large.render("France Wins!", True, RED)
+            text = font_large.render("France Wins!", True, ACCENT_RED)
             text_rect = text.get_rect(center=(WINDOW_SIZE // 2, WINDOW_SIZE // 2 - 80))
             screen.blit(text, text_rect)
             
@@ -378,19 +410,19 @@ def draw_winner_message():
     
     # Restart button
     restart_button_rect = pygame.Rect(150, 300, 300, 70)
-    pygame.draw.rect(screen, GREEN, restart_button_rect)
-    pygame.draw.rect(screen, BLACK, restart_button_rect, 3)  # Border
+    pygame.draw.rect(screen, PRIMARY_GREEN, restart_button_rect, border_radius=12)
+    pygame.draw.rect(screen, DARK_NAVY, restart_button_rect, 3, border_radius=12)  # Border
     
-    restart_text = font_small.render("Restart", True, BLACK)
+    restart_text = font_small.render("Restart", True, DARK_NAVY)
     restart_text_rect = restart_text.get_rect(center=restart_button_rect.center)
     screen.blit(restart_text, restart_text_rect)
     
     # Menu button
     menu_button_rect = pygame. Rect(150, 390, 300, 70)
-    pygame.draw.rect(screen, GRAY, menu_button_rect)
-    pygame.draw.rect(screen, BLACK, menu_button_rect, 3)  # Border
+    pygame.draw.rect(screen, LIGHT_GRAY, menu_button_rect, border_radius=12)
+    pygame.draw.rect(screen, DARK_NAVY, menu_button_rect, 3)  # Border
     
-    menu_text = font_small.render("Menu", True, BLACK)
+    menu_text = font_small.render("Menu", True, DARK_NAVY)
     menu_text_rect = menu_text. get_rect(center=menu_button_rect.center)
     screen.blit(menu_text, menu_text_rect)
     
@@ -404,7 +436,7 @@ def draw_menu():
     - one_player_button: pygame.Rect for 1 player button
     - two_players_button: pygame.Rect for 2 players button
     """
-    screen.fill(BG_COLOR)
+    draw_gradient_background()
     
     # Title
     title = font_large.render("TIC TAC TOE", True, BLACK)
@@ -413,17 +445,17 @@ def draw_menu():
     
     # 1 Player button
     one_player_button = pygame.Rect(150, 220, 300, 80)
-    pygame.draw.rect(screen, GREEN, one_player_button)
-    pygame.draw.rect(screen, BLACK, one_player_button, 3)
+    pygame.draw.rect(screen, PRIMARY_GREEN, one_player_button, border_radius=15)
+    pygame.draw.rect(screen, DARK_NAVY, one_player_button, 3, border_radius=15)
     
-    one_player_text = font_medium.render("1 Player", True, BLACK)
+    one_player_text = font_medium.render("1 Player", True, DARK_NAVY)
     one_player_text_rect = one_player_text.get_rect(center=one_player_button.center)
     screen.blit(one_player_text, one_player_text_rect)
     
     # 2 Players button
     two_players_button = pygame.Rect(150, 340, 300, 80)
-    pygame.draw.rect(screen, BLUE, two_players_button)
-    pygame.draw.rect(screen, BLACK, two_players_button, 3)
+    pygame.draw.rect(screen, PRIMARY_BLUE, two_players_button, border_radius=15)
+    pygame.draw.rect(screen, DARK_NAVY, two_players_button, 3, border_radius=15)
     
     two_players_text = font_medium.render("2 Players", True, WHITE)
     two_players_text_rect = two_players_text.get_rect(center=two_players_button.center)
@@ -470,8 +502,8 @@ def draw_settings_button():
     settings_button_rect = pygame.Rect(WINDOW_SIZE - 60, 10, 50, 50)
     
     # Draw gear icon background
-    pygame.draw.circle(screen, GRAY, settings_button_rect.center, 25)
-    pygame.draw.circle(screen, BLACK, settings_button_rect.center, 25, 2)
+    pygame.draw.circle(screen, LIGHT_GRAY, settings_button_rect.center, 25)
+    pygame.draw.circle(screen, DARK_NAVY, settings_button_rect.center, 25, 2)
     
     # Draw gear symbol manually (3 lines forming a settings icon)
     center = settings_button_rect.center
@@ -482,7 +514,7 @@ def draw_settings_button():
     
     for i in range(3):
         y_offset = (i - 1) * line_spacing
-        pygame.draw.line(screen, BLACK, 
+        pygame.draw.line(screen, DARK_NAVY, 
                         (center[0] - line_length//2, center[1] + y_offset),
                         (center[0] + line_length//2, center[1] + y_offset), 
                         3)
