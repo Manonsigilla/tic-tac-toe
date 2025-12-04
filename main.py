@@ -122,6 +122,7 @@ ai_player = "O"  # AI always plays as O
 ai_move_time = 0  # To manage AI move timing
 ai_delay = 1200  # milliseconds delay before AI plays
 winner_recorded = False  # To ensure we record the winner only once
+ai_difficulty = "hard" # Currently only "hard" is implemented but can be "easy", "medium", "hard"
 
 def play_sound(sound):
     """
@@ -367,6 +368,75 @@ def ordinateur(board, signe):
     print("Error: No available positions on board")
     return False
 
+def ordinateur_easy(board):
+    """
+    Simple AI function that chooses a random available position
+    
+    Parameters:
+    - board: list of 9 elements containing "", "X", or "O"
+    
+    Returns:
+    - int: position where AI wants to play (0-8)
+    - False: in case of error
+    """
+    # Input validation
+    if not isinstance(board, list) or len(board) != 9:
+        print("Error: board must be a list of 9 elements")
+        return False
+    
+    # Get list of available positions
+    available_positions = [i for i in range(9) if board[i] == ""]
+    
+    if available_positions:
+        chosen = random.choice(available_positions)
+        print(f"AI (easy): Choosing random position {chosen}")
+        return chosen
+    
+    # No available positions (should not happen in normal game)
+    print("Error: No available positions on board")
+    return False
+
+def ordinateur_medium(board, signe):
+    """
+    Medium difficulty AI that mixes random and strategic moves
+    
+    Parameters:
+    - board: list of 9 elements containing "", "X", or "O"
+    - signe: str, the symbol played by AI ("X" or "O")
+    
+    Returns:
+    - int: position where AI wants to play (0-8)
+    - False: in case of error
+    """
+    # 50% chance to play strategically, 50% random
+    if random.random() < 0.5:
+        return ordinateur(board, signe)
+    else:
+        return ordinateur_easy(board)
+    
+def get_ai_move(board, signe, difficulty):
+    """
+    Get AI move based on selected difficulty
+    
+    Parameters:
+    - board: list of 9 elements containing "", "X", or "O"
+    - signe: str, the symbol played by AI ("X" or "O")
+    - difficulty: str, "easy", "medium", or "hard"
+    
+    Returns:
+    - int: position where AI wants to play (0-8)
+    - False: in case of error
+    """
+    if difficulty == "easy":
+        return ordinateur_easy(board)
+    elif difficulty == "medium":
+        return ordinateur_medium(board, signe)
+    elif difficulty == "hard":
+        return ordinateur(board, signe)
+    else:
+        print("Error: Unknown AI difficulty level")
+        return False
+
 def draw_winner_message():
     """
     Display winner message and restart button
@@ -375,12 +445,6 @@ def draw_winner_message():
     - restart_button_rect: pygame.Rect for the restart button
     - menu_button_rect: pygame. Rect for the menu button
     """
-    global winner_recorded
-    
-    # Record game result only once
-    if not winner_recorded:
-        record_game_result(winner)
-        winner_recorded = True
     
     # Semi-transparent overlay
     overlay = pygame.Surface((WINDOW_SIZE, WINDOW_SIZE))
@@ -482,6 +546,56 @@ def draw_menu():
     
     return one_player_button, two_players_button, stats_button
 
+def draw_difficulty_menu():
+    """
+    Draw the AI difficulty selection menu
+    
+    Returns:
+    - easy_button: pygame.Rect for easy difficulty button
+    - medium_button: pygame.Rect for medium difficulty button
+    - hard_button: pygame.Rect for hard difficulty button
+    """
+    draw_gradient_background()
+    
+    # Title
+    title = font_large.render("Choose Difficulty", True, DARK_NAVY)
+    title_rect = title.get_rect(center=(WINDOW_SIZE // 2, 80))
+    screen.blit(title, title_rect)
+    
+    # Subtitle
+    subtitle_font = pygame.font.Font(None, 40)
+    subtitle = subtitle_font.render("How challenging should the AI be?", True, DARK_NAVY)
+    subtitle_rect = subtitle.get_rect(center=(WINDOW_SIZE // 2, 130))
+    screen.blit(subtitle, subtitle_rect)
+    
+    # Easy button
+    easy_button = pygame.Rect(150, 200, 300, 70)
+    pygame.draw.rect(screen, PRIMARY_GREEN, easy_button, border_radius=12)
+    pygame.draw.rect(screen, DARK_NAVY, easy_button, 3, border_radius=12)  # Border
+    
+    easy_text = font_small.render("Easy", True, DARK_NAVY)
+    easy_text_rect = easy_text.get_rect(center=easy_button.center)
+    screen.blit(easy_text, easy_text_rect)
+    
+    # Medium button
+    medium_button = pygame.Rect(150, 290, 300, 70)
+    pygame.draw.rect(screen, PRIMARY_BLUE, medium_button, border_radius=12)
+    pygame.draw.rect(screen, DARK_NAVY, medium_button, 3, border_radius=12)  # Border
+    
+    medium_text = font_small.render("Medium", True, WHITE)
+    medium_text_rect = medium_text.get_rect(center=medium_button.center)
+    screen.blit(medium_text, medium_text_rect)
+    
+    # Hard button
+    hard_button = pygame.Rect(150, 380, 300, 70)
+    pygame.draw.rect(screen, ACCENT_RED, hard_button, border_radius=12)
+    pygame.draw.rect(screen, DARK_NAVY, hard_button, 3, border_radius=12)  # Border
+    
+    hard_text = font_small.render("Hard", True, WHITE)
+    hard_text_rect = hard_text.get_rect(center=hard_button.center)
+    screen.blit(hard_text, hard_text_rect)
+    
+    return easy_button, medium_button, hard_button
 def reset_game():
     """
     Reset the game to initial state (keep same mode)
@@ -503,6 +617,7 @@ def return_to_menu():
     current_player = "X"
     game_over = False
     winner = None
+    winner_recorded = False
     game_mode = None
     game_state = "menu"
     print("Returned to menu")
@@ -685,14 +800,18 @@ def load_stats():
         'last_played': None
     }
     
+    stats_file = 'stats.json'
+    
     try:
-        if os.path.exists('stats. json'):
-            with open('stats.json', 'r') as f:
+        if os.path.exists(stats_file):
+            with open(stats_file, 'r') as f:
                 stats = json.load(f)
                 print("✅ Stats loaded successfully!")
+                print(f"🔍 Loaded stats: {stats}")
                 return stats
         else:
             print("📊 No stats file found, creating new one")
+            save_stats(default_stats)
             return default_stats
     except Exception as e:
         print(f"⚠️ Error loading stats: {e}")
@@ -971,6 +1090,10 @@ settings_button_rect = None
 settings_rects = {}
 dragging_music_slider = False
 dragging_sfx_slider = False
+easy_button = None
+medium_button = None
+hard_button = None
+difficulty_back_button = None
 
 while running:
     # Event handling
@@ -1035,8 +1158,8 @@ while running:
                 if one_player_button and one_player_button.collidepoint(mouse_pos):
                     play_sound(click_sound) # Play click sound
                     game_mode = "1P"
-                    game_state = "playing"
-                    print("1 Player mode selected")
+                    game_state = "difficulty"
+                    print("Opening difficulty selection for 1 Player mode")
                 
                 elif two_players_button and two_players_button.collidepoint(mouse_pos):
                     play_sound(click_sound) # Play click sound
@@ -1084,6 +1207,9 @@ while running:
                         if result:
                             game_over = True
                             winner = result
+                            if not winner_recorded:
+                                record_game_result(winner)
+                                winner_recorded = True
                             print(f"Game Over! Winner: {winner}")
                         else:
                             # Switch player
@@ -1098,7 +1224,26 @@ while running:
                     play_sound(click_sound) # Play click sound
                     reset_stats()
                     print("Statistics has been reset")
-            
+            elif game_state == "difficulty":
+                if easy_button and easy_button.collidepoint(mouse_pos):
+                    play_sound(click_sound) # Play click sound
+                    ai_difficulty = "easy"
+                    game_state = "playing"
+                    print("Easy difficulty selected")
+                elif medium_button and medium_button.collidepoint(mouse_pos):
+                    play_sound(click_sound) # Play click sound
+                    ai_difficulty = "medium"
+                    game_state = "playing"
+                    print("Medium difficulty selected")
+                elif hard_button and hard_button.collidepoint(mouse_pos):
+                    play_sound(click_sound) # Play click sound
+                    ai_difficulty = "hard"
+                    game_state = "playing"
+                    print("Hard difficulty selected")
+                elif difficulty_back_button and difficulty_back_button.collidepoint(mouse_pos):
+                    play_sound(click_sound) # Play click sound
+                    game_state = "menu"
+                    print("Returned to menu from difficulty selection")
         if event.type == pygame.MOUSEBUTTONUP:
             dragging_music_slider = False
             dragging_sfx_slider = False
@@ -1134,7 +1279,7 @@ while running:
         
         # Check if AI delay time has passed
         elif pygame.time.get_ticks() >= ai_move_time:
-            ai_move = ordinateur(board, ai_player) # Call the AI function
+            ai_move = get_ai_move(board, ai_player, ai_difficulty) # Call the AI function
             
             if ai_move is not False and 0 <= ai_move <= 8 and board[ai_move] == "":
                 board[ai_move] = ai_player
@@ -1150,6 +1295,9 @@ while running:
                 if result:
                     game_over = True
                     winner = result
+                    if not winner_recorded:
+                        record_game_result(winner)
+                        winner_recorded = True
                     print(f"Game Over! Winner: {winner}")
                 else:
                     # Switch back to human player
@@ -1168,6 +1316,10 @@ while running:
         back_button_rect, reset_stats_button_rect = draw_stats_screen()
         settings_button_rect = draw_settings_button()
         
+    elif game_state == "difficulty":
+        easy_button, medium_button, hard_button = draw_difficulty_menu()
+        settings_button_rect = draw_settings_button()
+
     elif game_state == "playing":
         draw_grid()
         draw_symbols()
