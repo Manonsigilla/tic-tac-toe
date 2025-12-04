@@ -112,18 +112,81 @@ except Exception as e:
     click_sound = DummySound()
 
 # Game state variables
-board = [""] * 9
-current_player = "X"
-game_over = False
-winner = None
-game_mode = None  # Will be "1P" or "2P"
-game_state = "menu"  # Can be "menu" or "playing"
-ai_player = "O"  # AI always plays as O
-ai_move_time = 0  # To manage AI move timing
-ai_delay = 1200  # milliseconds delay before AI plays
-winner_recorded = False  # To ensure we record the winner only once
-ai_difficulty = "hard" # Currently only "hard" is implemented but can be "easy", "medium", "hard"
+# board = [""] * 9
+# current_player = "X"
+# game_over = False
+# winner = None
+# game_mode = None  # Will be "1P" or "2P"
+# game_state = "menu"  # Can be "menu" or "playing"
+# ai_player = "O"  # AI always plays as O
+# ai_move_time = 0  # To manage AI move timing
+# ai_delay = 1200  # milliseconds delay before AI plays
+# winner_recorded = False  # To ensure we record the winner only once
+# ai_difficulty = "hard" # Currently only "hard" is implemented but can be "easy", "medium", "hard"
 
+class GameState:
+    def __init__(self):
+        # Board state
+        self.board = [""] * 9
+        self.current_player = "X"
+        self.game_over = False
+        self.winner = None
+        self.winner_recorded = False  # To ensure we record the winner only once
+        
+        # Game mode
+        self.game_mode = None  # Will be "1P" or "2P"
+        self.game_state = "menu"  # Can be "menu" or "playing"
+        
+        # AI settings
+        self.ai_player = "O"  # AI always plays as O
+        self.ai_move_time = 0  # To manage AI move timing
+        self.ai_delay = 1200  # milliseconds delay before AI plays
+        self.ai_difficulty = "hard" # Currently only "hard" is implemented but can be "easy", "medium", "hard"
+        self.ai_thinking = False  # Whether AI is currently "thinking"
+        
+        # UI state
+        self.settings_open = False
+        self.dragging_music_slider = False
+        self.dragging_sfx_slider = False
+        
+        # button rects (updated each frame)
+        self.restart_button_rect = None
+        self.menu_button_rect = None
+        self.one_player_button = None
+        self.two_players_button = None
+        self.stats_button = None
+        self.back_button_rect = None
+        self.reset_stats_button_rect = None
+        self.settings_button_rect = None
+        self.settings_rects = {}
+        self.easy_button = None
+        self.medium_button = None
+        self.hard_button = None
+        self.difficulty_back_button_rect = None
+        
+    def reset_game(self):
+        """
+        Reset the game to initial state (keep same mode)
+        """
+        self.board = [""] * 9
+        self.current_player = "X"
+        self.game_over = False
+        self.winner = None
+        self.winner_recorded = False
+        print("Game reset!")
+    
+    def return_to_menu(self):
+        """
+        Return to main menu and reset everything
+        """
+        self.board = [""] * 9
+        self.current_player = "X"
+        self.game_over = False
+        self.winner = None
+        self.winner_recorded = False
+        self.game_mode = None
+        self.game_state = "menu"
+        print("Returned to menu")
 def play_sound(sound):
     """
     Play a sound if sounds are enabled
@@ -193,12 +256,15 @@ def get_cell_from_mouse(pos):
     cell_index = row * 3 + col
     return cell_index
 
-def draw_symbols():
+def draw_symbols(game):
     """
     Draw X and O symbols (or images) on the board based on current board state
+    
+    Parameters:
+    - game: GameState object containing the board state
     """
     for i in range(9):
-        if board[i] != "":
+        if game.board[i] != "":
             # Calculate position
             row = i // 3
             col = i % 3
@@ -207,26 +273,26 @@ def draw_symbols():
             
             if use_images:
                 # Draw images
-                if board[i] == "X":
+                if game.board[i] == "X":
                     # Beer image for X
                     img_rect = beer_img.get_rect(center=(center_x, center_y))
                     screen.blit(beer_img, img_rect)
                 
-                elif board[i] == "O":
+                elif game.board[i] == "O":
                     # Wine image for O
                     img_rect = wine_img.get_rect(center=(center_x, center_y))
                     screen.blit(wine_img, img_rect)
             
             else:
                 # Fallback to default shapes if images not loaded
-                if board[i] == "O":
+                if game.board[i] == "O":
                     # Draw circle (O)
                     pygame.draw.circle(screen, RED, 
                     (center_x, center_y), 
                     CELL_SIZE // 3, 
                     LINE_WIDTH)
                 
-                elif board[i] == "X":
+                elif game.board[i] == "X":
                     # Draw cross (X) - two diagonal lines
                     offset = CELL_SIZE // 3
                     # Line from top-left to bottom-right
@@ -437,7 +503,7 @@ def get_ai_move(board, signe, difficulty):
         print("Error: Unknown AI difficulty level")
         return False
 
-def draw_winner_message():
+def draw_winner_message(game):
     """
     Display winner message and restart button
     
@@ -453,13 +519,13 @@ def draw_winner_message():
     screen.blit(overlay, (0, 0))
     
     # Winner text
-    if winner == "Draw":
+    if game.winner == "Draw":
         text = font_small.render("You have the same brain", True, BLACK)
         text_rect = text.get_rect(center=(WINDOW_SIZE // 2, WINDOW_SIZE // 2 - 80))
         screen.blit(text, text_rect)
     else:
         # Display different message with icons
-        if winner == "X":
+        if game.winner == "X":
             # Belgium wins - show text + beer image
             text = font_large.render("Belgium Wins!", True, ACCENT_GOLD)
             text_rect = text.get_rect(center=(WINDOW_SIZE // 2, WINDOW_SIZE // 2 - 80))
@@ -596,31 +662,31 @@ def draw_difficulty_menu():
     screen.blit(hard_text, hard_text_rect)
     
     return easy_button, medium_button, hard_button
-def reset_game():
-    """
-    Reset the game to initial state (keep same mode)
-    """
-    global board, current_player, game_over, winner, winner_recorded
-    board = [""] * 9
-    current_player = "X"
-    game_over = False
-    winner = None
-    winner_recorded = False
-    print("Game reset!")
+# def reset_game():
+#     """
+#     Reset the game to initial state (keep same mode)
+#     """
+#     global board, current_player, game_over, winner, winner_recorded
+#     board = [""] * 9
+#     current_player = "X"
+#     game_over = False
+#     winner = None
+#     winner_recorded = False
+#     print("Game reset!")
 
-def return_to_menu():
-    """
-    Return to main menu and reset everything
-    """
-    global board, current_player, game_over, winner, game_mode, game_state
-    board = [""] * 9
-    current_player = "X"
-    game_over = False
-    winner = None
-    winner_recorded = False
-    game_mode = None
-    game_state = "menu"
-    print("Returned to menu")
+# def return_to_menu():
+#     """
+#     Return to main menu and reset everything
+#     """
+#     global board, current_player, game_over, winner, game_mode, game_state
+#     board = [""] * 9
+#     current_player = "X"
+#     game_over = False
+#     winner = None
+#     winner_recorded = False
+#     game_mode = None
+#     game_state = "menu"
+#     print("Returned to menu")
     
 def draw_settings_button():
     """
@@ -1076,24 +1142,11 @@ def reset_stats():
 # Load game statistics
 game_stats = load_stats()
 
+# Create game state instance
+game = GameState()
+
 # Main game loop
 running = True
-restart_button_rect = None
-menu_button_rect = None
-one_player_button = None
-two_players_button = None
-stats_button = None
-back_button_rect = None
-reset_stats_button_rect = None
-ai_thinking = False  # To prevent multiple AI moves
-settings_button_rect = None
-settings_rects = {}
-dragging_music_slider = False
-dragging_sfx_slider = False
-easy_button = None
-medium_button = None
-hard_button = None
-difficulty_back_button = None
 
 while running:
     # Event handling
@@ -1105,233 +1158,232 @@ while running:
             mouse_pos = event.pos
             
             # Check settings button click (available in all states)
-            if not settings_open and settings_button_rect and settings_button_rect.collidepoint(mouse_pos):
-                settings_open = True
+            if not game.settings_open and game.settings_button_rect and game.settings_button_rect.collidepoint(mouse_pos):
+                game.settings_open = True
                 play_sound(click_sound) # Play click sound
                 print("Settings opened")
                 continue  # Skip other checks when opening settings
             
             # Settings menu interactions
-            if settings_open:
-                if settings_rects.get('close') and settings_rects['close'].collidepoint(mouse_pos):
-                    settings_open = False
+            if game.settings_open:
+                if game.settings_rects.get('close') and game.settings_rects['close'].collidepoint(mouse_pos):
+                    game.settings_open = False
                     play_sound(click_sound) # Play click sound
                     print("Settings closed")
                 
-                elif settings_rects.get('music_toggle') and settings_rects['music_toggle'].collidepoint(mouse_pos):
+                elif game.settings_rects.get('music_toggle') and game.settings_rects['music_toggle'].collidepoint(mouse_pos):
                     music_enabled = not music_enabled
                     update_volumes()
                     play_sound(click_sound) # Play click sound
                     print(f"Music {'enabled' if music_enabled else 'disabled'}")
                     
-                elif settings_rects.get('sfx_toggle') and settings_rects['sfx_toggle'].collidepoint(mouse_pos):
+                elif game.settings_rects.get('sfx_toggle') and game.settings_rects['sfx_toggle'].collidepoint(mouse_pos):
                     sfx_enabled = not sfx_enabled
                     update_volumes()
                     play_sound(click_sound) # Play click sound
                     print(f"SFX {'enabled' if sfx_enabled else 'disabled'}")
                     
-                if settings_rects.get('music_slider'):
-                    slider = settings_rects['music_slider']
+                if game.settings_rects.get('music_slider'):
+                    slider = game.settings_rects['music_slider']
                     # expand clickable area vertically for easier dragging
                     expanded_slider_rect = pygame.Rect(slider.x, slider.y - 15, slider.width, slider.height + 40)
                     if expanded_slider_rect.collidepoint(mouse_pos):
-                        dragging_music_slider = True
+                        game.dragging_music_slider = True
                         # immediately update volume on click
                         relative_x = mouse_pos[0] - slider.x
                         music_volume = max(0.0, min(1.0, relative_x / slider.width))
                         update_volumes()
                 
-                if settings_rects.get('sfx_slider'):
-                    slider = settings_rects['sfx_slider']
+                if game.settings_rects.get('sfx_slider'):
+                    slider = game.settings_rects['sfx_slider']
                     # expand clickable area vertically for easier dragging
                     expanded_slider_rect = pygame.Rect(slider.x, slider.y - 15, slider.width, slider.height + 40)
                     if expanded_slider_rect.collidepoint(mouse_pos):
-                        dragging_sfx_slider = True
+                        game.dragging_sfx_slider = True
                         # immediately update volume on click
                         relative_x = mouse_pos[0] - slider.x
-                        sfx_volume = max(0.0, min(1.0, relative_x / slider.width))
+                        game.sfx_volume = max(0.0, min(1.0, relative_x / slider.width))
                         update_volumes()
                 continue  # Skip other checks when in settings
             
             # Menu state
-            if game_state == "menu":
-                if one_player_button and one_player_button.collidepoint(mouse_pos):
+            if game.game_state == "menu":
+                if game.one_player_button and game.one_player_button.collidepoint(mouse_pos):
                     play_sound(click_sound) # Play click sound
-                    game_mode = "1P"
-                    game_state = "difficulty"
+                    game.game_mode = "1P"
+                    game.game_state = "difficulty"
                     print("Opening difficulty selection for 1 Player mode")
                 
-                elif two_players_button and two_players_button.collidepoint(mouse_pos):
+                elif game.two_players_button and game.two_players_button.collidepoint(mouse_pos):
                     play_sound(click_sound) # Play click sound
-                    game_mode = "2P"
-                    game_state = "playing"
+                    game.game_mode = "2P"
+                    game.game_state = "playing"
                     print("2 Players mode selected")
                     
-                elif stats_button and stats_button.collidepoint(mouse_pos):
+                elif game.stats_button and game.stats_button.collidepoint(mouse_pos):
                     play_sound(click_sound) # Play click sound
-                    game_state = "stats"
+                    game.game_state = "stats"
                     print("Statistics screen opened")
             
             # Playing state
-            elif game_state == "playing":
+            elif game.game_state == "playing":
                 # Check if game over buttons are clicked
-                if game_over:
-                    if restart_button_rect and restart_button_rect.collidepoint(mouse_pos):
+                if game.game_over:
+                    if game.restart_button_rect and game.restart_button_rect.collidepoint(mouse_pos):
                         play_sound(click_sound) # Play click sound
-                        reset_game()
+                        game.reset_game()
                     
-                    elif menu_button_rect and menu_button_rect.collidepoint(mouse_pos):
+                    elif game.menu_button_rect and game.menu_button_rect.collidepoint(mouse_pos):
                         play_sound(click_sound) # Play click sound
-                        return_to_menu()
+                        game.return_to_menu()
                 
                 # Regular game play (only if it's human's turn)
-                elif not ai_thinking:
+                elif not game.ai_thinking:
                     # Get cell index from mouse click
                     cell_index = get_cell_from_mouse(mouse_pos)
                     
                     # Check if cell is empty
-                    if board[cell_index] == "":
-                        board[cell_index] = current_player
+                    if game.board[cell_index] == "":
+                        game.board[cell_index] = game.current_player
                         
                         # Play appropriate sound based on player
-                        if current_player == "X":
+                        if game.current_player == "X":
                             play_sound(beer_click_sound) # Sound for beer (X)
                         else:
                             play_sound(wine_click_sound) # Sound for wine (O)
                             
-                        print(f"Player {current_player} played at position {cell_index}")
-                        print(f"Board: {board}")
+                        print(f"Player {game.current_player} played at position {cell_index}")
+                        print(f"Board: {game.board}")
                         
                         # Check for winner
-                        result = check_winner(board)
+                        result = check_winner(game.board)
                         if result:
-                            game_over = True
-                            winner = result
-                            if not winner_recorded:
-                                record_game_result(winner)
-                                winner_recorded = True
-                            print(f"Game Over! Winner: {winner}")
+                            game.game_over = True
+                            game.winner = result
+                            if not game.winner_recorded:
+                                record_game_result(game.winner)
+                                game.winner_recorded = True
+                            print(f"Game Over! Winner: {game.winner}")
                         else:
                             # Switch player
-                            current_player = "O" if current_player == "X" else "X"
-            elif game_state == "stats":
-                if back_button_rect and back_button_rect.collidepoint(mouse_pos):
+                            game.current_player = "O" if game.current_player == "X" else "X"
+            elif game.game_state == "stats":
+                if game.back_button_rect and game.back_button_rect.collidepoint(mouse_pos):
                     play_sound(click_sound) # Play click sound
-                    game_state = "menu"
+                    game.game_state = "menu"
                     print("Returned to menu from stats")
                 
-                elif reset_stats_button_rect and reset_stats_button_rect.collidepoint(mouse_pos):
+                elif game.reset_stats_button_rect and game.reset_stats_button_rect.collidepoint(mouse_pos):
                     play_sound(click_sound) # Play click sound
                     reset_stats()
                     print("Statistics has been reset")
-            elif game_state == "difficulty":
-                if easy_button and easy_button.collidepoint(mouse_pos):
+            elif game.game_state == "difficulty":
+                if game.easy_button and game.easy_button.collidepoint(mouse_pos):
                     play_sound(click_sound) # Play click sound
-                    ai_difficulty = "easy"
-                    game_state = "playing"
+                    game.ai_difficulty = "easy"
+                    game.game_state = "playing"
                     print("Easy difficulty selected")
-                elif medium_button and medium_button.collidepoint(mouse_pos):
+                elif game.medium_button and game.medium_button.collidepoint(mouse_pos):
                     play_sound(click_sound) # Play click sound
-                    ai_difficulty = "medium"
-                    game_state = "playing"
+                    game.ai_difficulty = "medium"
+                    game.game_state = "playing"
                     print("Medium difficulty selected")
-                elif hard_button and hard_button.collidepoint(mouse_pos):
+                elif game.hard_button and game.hard_button.collidepoint(mouse_pos):
                     play_sound(click_sound) # Play click sound
-                    ai_difficulty = "hard"
-                    game_state = "playing"
+                    game.ai_difficulty = "hard"
+                    game.game_state = "playing"
                     print("Hard difficulty selected")
-                elif difficulty_back_button and difficulty_back_button.collidepoint(mouse_pos):
+                elif game.difficulty_back_button and game.difficulty_back_button.collidepoint(mouse_pos):
                     play_sound(click_sound) # Play click sound
-                    game_state = "menu"
+                    game.game_state = "menu"
                     print("Returned to menu from difficulty selection")
         if event.type == pygame.MOUSEBUTTONUP:
-            dragging_music_slider = False
-            dragging_sfx_slider = False
+            game.dragging_music_slider = False
+            game.dragging_sfx_slider = False
             
         if event.type == pygame.MOUSEMOTION:
             mouse_pos = event.pos # Current mouse position
             
-            if dragging_music_slider and settings_rects.get('music_slider'):
+            if game.dragging_music_slider and game.settings_rects.get('music_slider'):
                 # Update music volume based on mouse position
-                slider = settings_rects['music_slider']
+                slider = game.settings_rects['music_slider']
                 relative_x = mouse_pos[0] - slider.x
                 music_volume = max(0.0, min(1.0, relative_x / slider.width))
                 update_volumes()
                 
-            elif dragging_sfx_slider and settings_rects.get('sfx_slider'):
+            elif game.dragging_sfx_slider and game.settings_rects.get('sfx_slider'):
                 # Update SFX volume based on mouse position
-                slider = settings_rects['sfx_slider']
+                slider = game.settings_rects['sfx_slider']
                 relative_x = mouse_pos[0] - slider.x
                 sfx_volume = max(0.0, min(1.0, relative_x / slider.width))
                 update_volumes()
                 
     # AI logic (runs every frame, but only acts when it's AI's turn)
-    if (game_state == "playing" and 
-        not game_over and 
-        game_mode == "1P" and 
-        current_player == ai_player):
+    if (game.game_state == "playing" and 
+        not game.game_over and 
+        game.game_mode == "1P" and 
+        game.current_player == game.ai_player):
         
-        if not ai_thinking:
+        if not game.ai_thinking:
             # Start AI thinking process
-            ai_thinking = True
-            ai_move_time = pygame.time.get_ticks() + ai_delay # Record the time when AI starts thinking
+            game.ai_thinking = True
+            game.ai_move_time = pygame.time.get_ticks() + game.ai_delay # Record the time when AI starts thinking
             print("AI is thinking...")
         
         # Check if AI delay time has passed
-        elif pygame.time.get_ticks() >= ai_move_time:
-            ai_move = get_ai_move(board, ai_player, ai_difficulty) # Call the AI function
+        elif pygame.time.get_ticks() >= game.ai_move_time:
+            ai_move = get_ai_move(game.board, game.ai_player, game.ai_difficulty) # Call the AI function
             
-            if ai_move is not False and 0 <= ai_move <= 8 and board[ai_move] == "":
-                board[ai_move] = ai_player
+            if ai_move is not False and 0 <= ai_move <= 8 and game.board[ai_move] == "":
+                game.board[ai_move] = game.ai_player
                 
                 # Play sound for AI move
                 play_sound(wine_click_sound)  # Sound for wine (O)
                 
                 print(f"AI played at position {ai_move}")
-                print(f"Board: {board}")
+                print(f"Board: {game.board}")
                 
                 # Check for winner
-                result = check_winner(board)
+                result = check_winner(game.board)
                 if result:
-                    game_over = True
-                    winner = result
-                    if not winner_recorded:
-                        record_game_result(winner)
-                        winner_recorded = True
-                    print(f"Game Over! Winner: {winner}")
+                    game.game_over = True
+                    game.winner = result
+                    if not game.winner_recorded:
+                        record_game_result(game.winner)
+                        game.winner_recorded = True
+                    print(f"Game Over! Winner: {game.winner}")
                 else:
                     # Switch back to human player
-                    current_player = "X"
+                    game.current_player = "X"
             else:
                 print(f"Error: AI returned invalid move {ai_move}")
                 
-            ai_thinking = False  # Reset AI thinking flag
+            game.ai_thinking = False  # Reset AI thinking flag
     
     # Drawing based on game state
-    if game_state == "menu":
-        one_player_button, two_players_button, stats_button = draw_menu()
-        settings_button_rect = draw_settings_button()
-    
-    elif game_state == "stats":
-        back_button_rect, reset_stats_button_rect = draw_stats_screen()
-        settings_button_rect = draw_settings_button()
+    if game.game_state == "menu":
+        game.one_player_button, game.two_players_button, game.stats_button = draw_menu()
+        game.settings_button_rect = draw_settings_button()
+    elif game.game_state == "stats":
+        game.back_button_rect, game.reset_stats_button_rect = draw_stats_screen()
+        game.settings_button_rect = draw_settings_button()
         
-    elif game_state == "difficulty":
-        easy_button, medium_button, hard_button = draw_difficulty_menu()
-        settings_button_rect = draw_settings_button()
+    elif game.game_state == "difficulty":
+        game.easy_button, game.medium_button, game.hard_button = draw_difficulty_menu()
+        game.settings_button_rect = draw_settings_button()
 
-    elif game_state == "playing":
+    elif game.game_state == "playing":
         draw_grid()
-        draw_symbols()
-        settings_button_rect = draw_settings_button()
+        draw_symbols(game)
+        game.settings_button_rect = draw_settings_button()
         
         # Draw winner message if game is over
-        if game_over:
-            restart_button_rect, menu_button_rect = draw_winner_message()
+        if game.game_over:
+            game.restart_button_rect, game.menu_button_rect = draw_winner_message(game)
     
     # Draw settings overlay on top of everything if open
-    if settings_open:
-        settings_rects = draw_settings_menu()
+    if game.settings_open:
+        game.settings_rects = draw_settings_menu()
     
     # Update display
     pygame.display.flip()
