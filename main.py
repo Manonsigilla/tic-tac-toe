@@ -72,13 +72,6 @@ except Exception as e:
     print("Falling back to default X and O symbols")
     use_images = False
     
-# Settings state
-settings_open = False
-music_volume = 0.5
-sfx_volume = 0.7
-music_enabled = True
-sfx_enabled = True
-    
 # Load sounds
 try:
     # load background music
@@ -112,19 +105,6 @@ except Exception as e:
     wine_click_sound = DummySound()
     click_sound = DummySound()
 
-# Game state variables
-# board = [""] * 9
-# current_player = "X"
-# game_over = False
-# winner = None
-# game_mode = None  # Will be "1P" or "2P"
-# game_state = "menu"  # Can be "menu" or "playing"
-# ai_player = "O"  # AI always plays as O
-# ai_move_time = 0  # To manage AI move timing
-# ai_delay = 1200  # milliseconds delay before AI plays
-# winner_recorded = False  # To ensure we record the winner only once
-# ai_difficulty = "hard" # Currently only "hard" is implemented but can be "easy", "medium", "hard"
-
 class GameState:
     def __init__(self):
         # Board state
@@ -150,10 +130,18 @@ class GameState:
         self.dragging_music_slider = False
         self.dragging_sfx_slider = False
         
+        # Settings
+        self.music_volume = 0.5
+        self.sfx_volume = 0.7
+        self.music_enabled = True
+        self.sfx_enabled = True
+        
         # Animation state
         self.fireworks = []  # List of active Firework objects
         self.button_hover = None  # Currently hovered button
         self.button_scales = {}  # Scale factors for buttons (for hover effect)
+        self.ticks = 0.0  # General purpose tick counter, time in seconds, updated each frame
+        self.buttons_shimmers = {}  # For shimmer effect on buttons
         
         # button rects (updated each frame)
         self.restart_button_rect = None
@@ -280,14 +268,14 @@ class Firework:
         Check if all particles are dead
         """
         return len(self.particles) == 0 
-def play_sound(sound):
+def play_sound(game, sound):
     """
     Play a sound if sounds are enabled
     
     Parameters:
     - sound: pygame.mixer.Sound object to play
     """
-    if use_sounds and sound and sfx_enabled:
+    if use_sounds and sound and game.sfx_enabled:
         sound.play()
 
 def draw_gradient_background():
@@ -436,57 +424,138 @@ def update_and_draw_fireworks(game, screen):
     
     # Remove finished fireworks
     game.fireworks = [fw for fw in game.fireworks if not fw.is_finished()]
-    
+
 def draw_animated_button(game, rect, color, text, text_color, mouse_pos, button_id):
     """
-    Draw a button with hover animation effect
-    
-    Parameters:
-    - game: GameState object containing button scales
-    - rect: pygame.Rect for button position and size
-    - color: tuple RGB color for button background
-    - text: str, text to display on button
-    - text_color: tuple RGB color for text
-    - mouse_pos: tuple (x, y) current mouse position
-    - button_id: str, unique identifier for the button
-    
-    Returns:
-    - pygame.Rect: updated rect of the button (for click detection)
+    Animated button with LIQUID WAVY BORDERS - like water ripples 💧
     """
-    # Check if mouse is hovering over button
     is_hovering = rect.collidepoint(mouse_pos) if mouse_pos else False
     
     # Initialize scale if not present
     if button_id not in game.button_scales:
         game.button_scales[button_id] = 1.0
         
-    # Decide target scale first
+    # Smooth scale animation
     target_scale = 1.05 if is_hovering else 1.0
-    
-    # Smoothly interpolate scale
     current = game.button_scales[button_id]
-    smoothing = 0.16  # Adjust for speed of scaling
+    smoothing = 0.15
     game.button_scales[button_id] = current + (target_scale - current) * smoothing
     scale = game.button_scales[button_id]
     
-    # Compute scaled rect around the same center
+    # Calculate base scaled rect
     center = rect.center
-    scaled_width = max(1, int(rect.width * scale))
-    scaled_height = max(1, int(rect.height * scale))
-    scaled_rect = pygame.Rect(0, 0, scaled_width, scaled_height)
-    scaled_rect.center = center
+    scaled_width = int(rect.width * scale)
+    scaled_height = int(rect.height * scale)
+    base_rect = pygame.Rect(0, 0, scaled_width, scaled_height)
+    base_rect.center = center
     
-    # Adjust color if hovering (make slightly brighter)
     if is_hovering:
-        hover_color = tuple(min(255, int(c * 1.1)) for c in color)
-    else:
-        hover_color = color
+        # 🌊 LIQUID RIPPLE EFFECT - Draw button as deformed polygon
+        time = game.ticks
         
-    # Draw button background and border
-    pygame.draw.rect(screen, hover_color, scaled_rect, border_radius=12)
-    pygame.draw.rect(screen, DARK_NAVY, scaled_rect, 3, border_radius=12)  # Border
+        # Number of points around the perimeter for wavy effect
+        num_points = 40  # More points = smoother waves
+        points = []
+        
+        # Create unique ripple pattern for each button
+        seed = sum(ord(c) for c in button_id)
+        
+        for i in range(num_points):
+            # Angle around the rectangle
+            angle = (i / num_points) * 2 * math.pi
+            
+            # Base position on rectangle perimeter
+            if 0 <= angle < math.pi / 2:  # Top-right quadrant
+                t = angle / (math.pi / 2)
+                base_x = base_rect.left + base_rect.width * t
+                base_y = base_rect.top
+            elif math.pi / 2 <= angle < math.pi:  # Top-left quadrant  
+                t = (angle - math.pi / 2) / (math.pi / 2)
+                base_x = base_rect.right
+                base_y = base_rect.top + base_rect.height * t
+            elif math.pi <= angle < 3 * math.pi / 2:  # Bottom-left quadrant
+                t = (angle - math.pi) / (math.pi / 2)
+                base_x = base_rect.right - base_rect.width * t
+                base_y = base_rect.bottom
+            else:  # Bottom-right quadrant
+                t = (angle - 3 * math.pi / 2) / (math.pi / 2)
+                base_x = base_rect.left
+                base_y = base_rect.bottom - base_rect.height * t
+            
+            # 💧 MULTIPLE RIPPLE WAVES (chaotic like water drop)
+            # Wave 1: Fast chaotic ripple
+            wave1 = math.sin(time * 4.0 + i * 0.5 + seed) * 3
+            
+            # Wave 2: Slower deep wave
+            wave2 = math.sin(time * 2.0 + i * 0.3 - seed * 0.5) * 4
+            
+            # Wave 3: Medium circular wave
+            wave3 = math.cos(time * 3.0 + i * 0.4 + seed * 0.3) * 2.5
+            
+            # Combine waves for chaotic water effect
+            ripple = wave1 + wave2 + wave3
+            
+            # Apply ripple perpendicular to edge (outward/inward)
+            # Calculate normal vector (perpendicular to edge)
+            dx = base_x - base_rect.centerx
+            dy = base_y - base_rect.centery
+            dist = math.sqrt(dx**2 + dy**2) or 1
+            
+            # Normalize and apply ripple
+            ripple_x = base_x + (dx / dist) * ripple
+            ripple_y = base_y + (dy / dist) * ripple
+            
+            points.append((ripple_x, ripple_y))
+        
+        # Draw the wavy button background
+        if len(points) >= 3:
+            pygame.draw.polygon(screen, color, points)
+            
+            # Draw wavy border
+            pygame.draw.polygon(screen, DARK_NAVY, points, 3)
+            
+            # Glow effect around wavy edges
+            pulse = (math.sin(game.ticks * 4.0) + 1) / 2
+            glow_intensity = 0.3 + pulse * 0.4
+            
+            for i in range(5):
+                alpha = int(80 * glow_intensity * (1 - i/5))
+                glow_color = (
+                    min(255, color[0] + 100),
+                    min(255, color[1] + 100),
+                    min(255, color[2] + 100),
+                    alpha
+                )
+                
+                # Expand points outward for glow layers
+                glow_points = []
+                for px, py in points:
+                    dx = px - base_rect.centerx
+                    dy = py - base_rect.centery
+                    dist = math.sqrt(dx**2 + dy**2) or 1
+                    expand = i * 2
+                    glow_x = px + (dx / dist) * expand
+                    glow_y = py + (dy / dist) * expand
+                    glow_points.append((glow_x, glow_y))
+                
+                if len(glow_points) >= 3:
+                    glow_surface = pygame.Surface((base_rect.width + 50, base_rect.height + 50), pygame.SRCALPHA)
+                    offset_x = base_rect.centerx - (base_rect.width + 50) // 2
+                    offset_y = base_rect.centery - (base_rect.height + 50) // 2
+                    
+                    adjusted_points = [(x - offset_x, y - offset_y) for x, y in glow_points]
+                    pygame.draw.polygon(glow_surface, glow_color, adjusted_points, 2)
+                    screen.blit(glow_surface, (offset_x, offset_y))
+        
+        scaled_rect = base_rect
+        
+    else:
+        # Normal button when not hovering
+        pygame.draw.rect(screen, color, base_rect, border_radius=12)
+        pygame.draw.rect(screen, DARK_NAVY, base_rect, width=3, border_radius=12)
+        scaled_rect = base_rect
     
-    # Draw text centered in scaled rect
+    # Draw text
     text_surface = font_small.render(text, True, text_color)
     text_rect = text_surface.get_rect(center=scaled_rect.center)
     screen.blit(text_surface, text_rect)
@@ -735,29 +804,19 @@ def draw_winner_message(game):
                 wine_rect = wine_display.get_rect(midleft=(text_rect.right + 15, WINDOW_SIZE // 2 - 80))
                 screen.blit(wine_display, wine_rect)
     
+    mouse_pos = pygame.mouse.get_pos()
+    
     # Restart button
-    restart_button_rect = pygame.Rect(150, 300, 300, 70)
-    pygame.draw.rect(screen, PRIMARY_GREEN, restart_button_rect, border_radius=12)
-    pygame.draw.rect(screen, DARK_NAVY, restart_button_rect, 3, border_radius=12)  # Border
+    base_restart = pygame.Rect(150, 300, 300, 70)
+    game.restart_button_rect = draw_animated_button(game, base_restart, PRIMARY_GREEN, "Restart", DARK_NAVY, mouse_pos, "winner.restart")
+    base_menu = pygame.Rect(150, 390, 300, 70)
+    game.menu_button_rect = draw_animated_button(game, base_menu, LIGHT_GRAY, "Menu", DARK_NAVY, mouse_pos, "winner.menu")
     
-    restart_text = font_small.render("Restart", True, DARK_NAVY)
-    restart_text_rect = restart_text.get_rect(center=restart_button_rect.center)
-    screen.blit(restart_text, restart_text_rect)
-    
-    # Menu button
-    menu_button_rect = pygame. Rect(150, 390, 300, 70)
-    pygame.draw.rect(screen, LIGHT_GRAY, menu_button_rect, border_radius=12)
-    pygame.draw.rect(screen, DARK_NAVY, menu_button_rect, 3, border_radius=12)  # Border
-    
-    menu_text = font_small.render("Menu", True, DARK_NAVY)
-    menu_text_rect = menu_text. get_rect(center=menu_button_rect.center)
-    screen.blit(menu_text, menu_text_rect)
-    
-    return restart_button_rect, menu_button_rect
+    return game.restart_button_rect, game.menu_button_rect
 
-def draw_menu():
+def draw_menu(game):
     """
-    Draw the main menu with 1 Player and 2 Players buttons
+    Draw the main menu with 1 Player and 2 Players animated buttons
     
     Returns:
     - one_player_button: pygame.Rect for 1 player button
@@ -770,43 +829,30 @@ def draw_menu():
     title_rect = title.get_rect(center=(WINDOW_SIZE // 2, 80))
     screen.blit(title, title_rect)
     
-    # Stats button
-    stats_button = pygame.Rect(200, 160, 200, 60)
-    pygame.draw.rect(screen, LIGHT_GRAY, stats_button, border_radius=12)
-    pygame.draw.rect(screen, DARK_NAVY, stats_button, 3, border_radius=12)  # Border
+    mouse_pos = pygame.mouse.get_pos()
     
-    stats_text = font_small.render("Stats", True, DARK_NAVY)
-    stats_text_rect = stats_text.get_rect(center=stats_button.center)
-    screen.blit(stats_text, stats_text_rect)
+    # Stats button (small)
+    base_stats = pygame.Rect(200, 160, 200, 60)
+    game.stats_button = draw_animated_button(game, base_stats, LIGHT_GRAY, "Stats", DARK_NAVY, mouse_pos, "menu.stats")
     
     # 1 Player button
-    one_player_button = pygame.Rect(150, 250, 300, 80)
-    pygame.draw.rect(screen, PRIMARY_GREEN, one_player_button, border_radius=15)
-    pygame.draw.rect(screen, DARK_NAVY, one_player_button, 3, border_radius=15)
-    
-    one_player_text = font_medium.render("1 Player", True, DARK_NAVY)
-    one_player_text_rect = one_player_text.get_rect(center=one_player_button.center)
-    screen.blit(one_player_text, one_player_text_rect)
+    base_one = pygame.Rect(150, 250, 300, 80)
+    game.one_player_button = draw_animated_button(game, base_one, PRIMARY_GREEN, "1 Player", DARK_NAVY, mouse_pos, "menu.one")
     
     # 2 Players button
-    two_players_button = pygame.Rect(150, 360, 300, 80)
-    pygame.draw.rect(screen, PRIMARY_BLUE, two_players_button, border_radius=15)
-    pygame.draw.rect(screen, DARK_NAVY, two_players_button, 3, border_radius=15)
+    base_two = pygame.Rect(150, 360, 300, 80)
+    game.two_players_button = draw_animated_button(game, base_two, PRIMARY_BLUE, "2 Players", WHITE, mouse_pos, "menu.two")
     
-    two_players_text = font_medium.render("2 Players", True, WHITE)
-    two_players_text_rect = two_players_text.get_rect(center=two_players_button.center)
-    screen.blit(two_players_text, two_players_text_rect)
-    
-    return one_player_button, two_players_button, stats_button
+    return game.one_player_button, game.two_players_button, game.stats_button
 
-def draw_difficulty_menu():
+def draw_difficulty_menu(game):
     """
     Draw the AI difficulty selection menu
     
     Returns:
-    - easy_button: pygame.Rect for easy difficulty button
-    - medium_button: pygame.Rect for medium difficulty button
-    - hard_button: pygame.Rect for hard difficulty button
+    - easy_button: pygame.Rect for easy difficulty animated button
+    - medium_button: pygame.Rect for medium difficulty animated button
+    - hard_button: pygame.Rect for hard difficulty animated button
     """
     draw_gradient_background()
     
@@ -821,34 +867,19 @@ def draw_difficulty_menu():
     subtitle_rect = subtitle.get_rect(center=(WINDOW_SIZE // 2, 130))
     screen.blit(subtitle, subtitle_rect)
     
-    # Easy button
-    easy_button = pygame.Rect(150, 200, 300, 70)
-    pygame.draw.rect(screen, PRIMARY_GREEN, easy_button, border_radius=12)
-    pygame.draw.rect(screen, DARK_NAVY, easy_button, 3, border_radius=12)  # Border
+    mouse_pos = pygame.mouse.get_pos()
     
-    easy_text = font_small.render("Easy", True, DARK_NAVY)
-    easy_text_rect = easy_text.get_rect(center=easy_button.center)
-    screen.blit(easy_text, easy_text_rect)
+    # Easy
+    base_easy = pygame.Rect(150, 200, 300, 70)
+    game.easy_button = draw_animated_button(game, base_easy, PRIMARY_GREEN, "Easy", DARK_NAVY, mouse_pos, "diff.easy")
+    # Medium
+    base_med = pygame.Rect(150, 290, 300, 70)
+    game.medium_button = draw_animated_button(game, base_med, PRIMARY_BLUE, "Medium", WHITE, mouse_pos, "diff.medium")
+    # Hard
+    base_hard = pygame.Rect(150, 380, 300, 70)
+    game.hard_button = draw_animated_button(game, base_hard, ACCENT_RED, "Hard", WHITE, mouse_pos, "diff.hard")
     
-    # Medium button
-    medium_button = pygame.Rect(150, 290, 300, 70)
-    pygame.draw.rect(screen, PRIMARY_BLUE, medium_button, border_radius=12)
-    pygame.draw.rect(screen, DARK_NAVY, medium_button, 3, border_radius=12)  # Border
-    
-    medium_text = font_small.render("Medium", True, WHITE)
-    medium_text_rect = medium_text.get_rect(center=medium_button.center)
-    screen.blit(medium_text, medium_text_rect)
-    
-    # Hard button
-    hard_button = pygame.Rect(150, 380, 300, 70)
-    pygame.draw.rect(screen, ACCENT_RED, hard_button, border_radius=12)
-    pygame.draw.rect(screen, DARK_NAVY, hard_button, 3, border_radius=12)  # Border
-    
-    hard_text = font_small.render("Hard", True, WHITE)
-    hard_text_rect = hard_text.get_rect(center=hard_button.center)
-    screen.blit(hard_text, hard_text_rect)
-    
-    return easy_button, medium_button, hard_button
+    return game.easy_button, game.medium_button, game.hard_button
     
 def draw_settings_button():
     """
@@ -861,7 +892,7 @@ def draw_settings_button():
     
     # Draw gear icon background
     pygame.draw.circle(screen, LIGHT_GRAY, settings_button_rect.center, 25)
-    pygame.draw.circle(screen, DARK_NAVY, settings_button_rect.center, 25, 2)
+    pygame.draw.circle(screen, DARK_NAVY, settings_button_rect.center, 25, 2) # Border
     
     # Draw gear symbol manually (3 lines forming a settings icon)
     center = settings_button_rect.center
@@ -879,7 +910,7 @@ def draw_settings_button():
     
     return settings_button_rect
 
-def draw_settings_menu():
+def draw_settings_menu(game):
     """
     Draw the settings overlay with volume controls
     
@@ -915,26 +946,26 @@ def draw_settings_menu():
     pygame.draw.rect(screen, BLACK, slider_rect, 1)  # Border
     
     # Draw filled portion of slider
-    filled_width = int(music_volume * 340)
+    filled_width = int(game.music_volume * 340)
     if filled_width > 0:
         filled_rect = pygame.Rect(130, slider_y, filled_width, 10)
-        pygame.draw.rect(screen, GREEN if music_enabled else RED, filled_rect)
+        pygame.draw.rect(screen, GREEN if game.music_enabled else RED, filled_rect)
     
     # Music slider handle
-    handle_x = 130 + int(music_volume * 340)
+    handle_x = 130 + int(game.music_volume * 340)
     music_handle_rect = pygame.Rect(handle_x - 12, slider_y - 12, 24, 34)
-    pygame.draw.rect(screen, GREEN if music_enabled else RED, music_handle_rect)
+    pygame.draw.rect(screen, GREEN if game.music_enabled else RED, music_handle_rect)
     pygame.draw.rect(screen, BLACK, music_handle_rect, 2) # Border
     
     # Music volume percentage
-    volume_text = font_small.render(f"{int(music_volume * 100)}%", True, BLACK)
+    volume_text = font_small.render(f"{int(game.music_volume * 100)}%", True, BLACK)
     screen.blit(volume_text, (500 - volume_text.get_width(), 180))
     
     # Music toggle button
     music_toggle_rect = pygame.Rect(130, 250, 150, 40)
-    pygame.draw.rect(screen, GREEN if music_enabled else RED, music_toggle_rect)
-    pygame.draw.rect(screen, BLACK, music_toggle_rect, 2)
-    toggle_text = font_small.render("ON" if music_enabled else "OFF", True, BLACK)
+    pygame.draw.rect(screen, GREEN if game.music_enabled else RED, music_toggle_rect, border_radius=8)
+    pygame.draw.rect(screen, BLACK, music_toggle_rect, 2, border_radius=8)
+    toggle_text = font_small.render("ON" if game.music_enabled else "OFF", True, BLACK)
     toggle_text_rect = toggle_text.get_rect(center=music_toggle_rect.center)
     screen.blit(toggle_text, toggle_text_rect)
     
@@ -951,33 +982,33 @@ def draw_settings_menu():
     pygame.draw.rect(screen, BLACK, sfx_slider_rect, 1)  # Border
     
     # Draw filled portion of slider
-    sfx_filled_width = int(sfx_volume * 340)
+    sfx_filled_width = int(game.sfx_volume * 340)
     if sfx_filled_width > 0:
         sfx_filled_rect = pygame.Rect(130, sfx_slider_y, sfx_filled_width, 10)
-        pygame.draw.rect(screen, GREEN if sfx_enabled else RED, sfx_filled_rect)
+        pygame.draw.rect(screen, GREEN if game.sfx_enabled else RED, sfx_filled_rect)
     
     # SFX slider handle
-    sfx_handle_x = 130 + int(sfx_volume * 340)
+    sfx_handle_x = 130 + int(game.sfx_volume * 340)
     sfx_handle_rect = pygame. Rect(sfx_handle_x - 12, sfx_slider_y - 12, 24, 34)
-    pygame.draw.rect(screen, GREEN if sfx_enabled else RED, sfx_handle_rect)
+    pygame.draw.rect(screen, GREEN if game.sfx_enabled else RED, sfx_handle_rect)
     pygame.draw.rect(screen, BLACK, sfx_handle_rect, 2) # Border
     
     # SFX volume percentage
-    sfx_volume_text = font_small.render(f"{int(sfx_volume * 100)}%", True, BLACK)
+    sfx_volume_text = font_small.render(f"{int(game.sfx_volume * 100)}%", True, BLACK)
     screen.blit(sfx_volume_text, (500 - sfx_volume_text.get_width(), 310))
     
     # SFX toggle button
     sfx_toggle_rect = pygame.Rect(130, 380, 150, 40)
-    pygame.draw.rect(screen, GREEN if sfx_enabled else RED, sfx_toggle_rect)
-    pygame.draw.rect(screen, BLACK, sfx_toggle_rect, 2)
-    sfx_toggle_text = font_small.render("ON" if sfx_enabled else "OFF", True, BLACK)
+    pygame.draw.rect(screen, GREEN if game.sfx_enabled else RED, sfx_toggle_rect, border_radius=8)
+    pygame.draw.rect(screen, BLACK, sfx_toggle_rect, 2, border_radius=8)
+    sfx_toggle_text = font_small.render("ON" if game.sfx_enabled else "OFF", True, BLACK)
     sfx_toggle_text_rect = sfx_toggle_text.get_rect(center=sfx_toggle_rect.center)
     screen. blit(sfx_toggle_text, sfx_toggle_text_rect)
     
     # Close button
     close_button_rect = pygame.Rect(200, 450, 200, 50)
-    pygame.draw.rect(screen, BLUE, close_button_rect)
-    pygame.draw.rect(screen, BLACK, close_button_rect, 2)
+    pygame.draw.rect(screen, BLUE, close_button_rect, border_radius=12)
+    pygame.draw.rect(screen, BLACK, close_button_rect, 2, border_radius=12)
     close_text = font_small.render("Close", True, WHITE)
     close_text_rect = close_text.get_rect(center=close_button_rect.center)
     screen.blit(close_text, close_text_rect)
@@ -993,19 +1024,19 @@ def draw_settings_menu():
         'panel': panel_rect
     }
 
-def update_volumes():
+def update_volumes(game):
     """
     Update the actual volumes of music and sound effects
     """
     if use_sounds:
         # Update music volume
-        if music_enabled:
-            pygame. mixer.music.set_volume(music_volume)
+        if game.music_enabled:
+            pygame.mixer.music.set_volume(game.music_volume)
         else:
-            pygame.mixer.music. set_volume(0)
+            pygame.mixer.music.set_volume(0)
         
         # Update sound effects volume
-        actual_sfx_volume = sfx_volume if sfx_enabled else 0
+        actual_sfx_volume = game.sfx_volume if game.sfx_enabled else 0
         if beer_click_sound:
             beer_click_sound.set_volume(actual_sfx_volume)
         if wine_click_sound:
@@ -1059,14 +1090,13 @@ def save_stats(stats):
     except Exception as e:
         print(f"⚠️ Error saving stats: {e}")
 
-def record_game_result(winner_symbol):
+def record_game_result(game_stats, winner_symbol):
     """
     Record the result of a game and update statistics
     
     Parameters:
     - winner_symbol: "X", "O", or "Draw"
     """
-    global game_stats
     
     if winner_symbol == "X":
         game_stats['belgium_wins'] += 1
@@ -1080,6 +1110,7 @@ def record_game_result(winner_symbol):
     
     save_stats(game_stats)
     print(f"📊 Game recorded: {winner_symbol}")
+    return game_stats
 
 def draw_pie_chart(center_x, center_y, radius, belgium_wins, france_wins, draws):
     """
@@ -1174,7 +1205,7 @@ def draw_pie_slice(center_x, center_y, radius, start_angle, end_angle, color):
     if len(points) >= 3:
         pygame.draw.polygon(screen, color, points)
 
-def draw_stats_screen():
+def draw_stats_screen(game):
     """
     Draw the statistics screen with game history and pie chart
     
@@ -1266,25 +1297,17 @@ def draw_stats_screen():
         legend_text = legend_font.render("Draws", True, DARK_NAVY)
         screen.blit(legend_text, (legend_x + 15, legend_y - 10))
     
+    mouse_pos = pygame.mouse.get_pos()
+    
     # Back button
-    back_button_rect = pygame.Rect(100, 520, 180, 60)
-    pygame.draw.rect(screen, PRIMARY_BLUE, back_button_rect, border_radius=12)
-    pygame.draw.rect(screen, DARK_NAVY, back_button_rect, 3, border_radius=12)
+    base_back = pygame.Rect(100, 520, 180, 60)
+    game.back_button_rect = draw_animated_button(game, base_back, PRIMARY_BLUE, "Back", WHITE, mouse_pos, "stats.back")
     
-    back_text = font_small.render("Back", True, WHITE)
-    back_text_rect = back_text.get_rect(center=back_button_rect.center)
-    screen.blit(back_text, back_text_rect)
+    # Reset stats
+    base_reset = pygame.Rect(320, 520, 180, 60)
+    game.reset_stats_button_rect = draw_animated_button(game, base_reset, ACCENT_RED, "Reset", WHITE, mouse_pos, "stats.reset")
     
-    # Reset stats button
-    reset_stats_button_rect = pygame.Rect(320, 520, 180, 60)
-    pygame.draw. rect(screen, ACCENT_RED, reset_stats_button_rect, border_radius=12)
-    pygame.draw.rect(screen, DARK_NAVY, reset_stats_button_rect, 3, border_radius=12)
-    
-    reset_text = font_small.render("Reset", True, WHITE)
-    reset_text_rect = reset_text.get_rect(center=reset_stats_button_rect.center)
-    screen.blit(reset_text, reset_text_rect)
-    
-    return back_button_rect, reset_stats_button_rect
+    return game.back_button_rect, game.reset_stats_button_rect
 
 def reset_stats():
     """
@@ -1311,6 +1334,8 @@ game = GameState()
 running = True
 
 while running:
+    game.ticks = pygame.time.get_ticks() / 1000.0  # Convert milliseconds to seconds
+    mouse_pos = pygame.mouse.get_pos() # Current mouse position
     # Event handling
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -1322,7 +1347,7 @@ while running:
             # Check settings button click (available in all states)
             if not game.settings_open and game.settings_button_rect and game.settings_button_rect.collidepoint(mouse_pos):
                 game.settings_open = True
-                play_sound(click_sound) # Play click sound
+                play_sound(game, click_sound) # Play click sound
                 print("Settings opened")
                 continue  # Skip other checks when opening settings
             
@@ -1330,20 +1355,20 @@ while running:
             if game.settings_open:
                 if game.settings_rects.get('close') and game.settings_rects['close'].collidepoint(mouse_pos):
                     game.settings_open = False
-                    play_sound(click_sound) # Play click sound
+                    play_sound(game, click_sound) # Play click sound
                     print("Settings closed")
                 
                 elif game.settings_rects.get('music_toggle') and game.settings_rects['music_toggle'].collidepoint(mouse_pos):
-                    music_enabled = not music_enabled
-                    update_volumes()
-                    play_sound(click_sound) # Play click sound
-                    print(f"Music {'enabled' if music_enabled else 'disabled'}")
+                    game.music_enabled = not game.music_enabled
+                    update_volumes(game)
+                    play_sound(game, click_sound) # Play click sound
+                    print(f"Music {'enabled' if game.music_enabled else 'disabled'}")
                     
                 elif game.settings_rects.get('sfx_toggle') and game.settings_rects['sfx_toggle'].collidepoint(mouse_pos):
-                    sfx_enabled = not sfx_enabled
-                    update_volumes()
-                    play_sound(click_sound) # Play click sound
-                    print(f"SFX {'enabled' if sfx_enabled else 'disabled'}")
+                    game.sfx_enabled = not game.sfx_enabled
+                    update_volumes(game)
+                    play_sound(game, click_sound) # Play click sound
+                    print(f"SFX {'enabled' if game.sfx_enabled else 'disabled'}")
                     
                 if game.settings_rects.get('music_slider'):
                     slider = game.settings_rects['music_slider']
@@ -1353,8 +1378,8 @@ while running:
                         game.dragging_music_slider = True
                         # immediately update volume on click
                         relative_x = mouse_pos[0] - slider.x
-                        music_volume = max(0.0, min(1.0, relative_x / slider.width))
-                        update_volumes()
+                        game.music_volume = max(0.0, min(1.0, relative_x / slider.width))
+                        update_volumes(game)
                 
                 if game.settings_rects.get('sfx_slider'):
                     slider = game.settings_rects['sfx_slider']
@@ -1365,25 +1390,25 @@ while running:
                         # immediately update volume on click
                         relative_x = mouse_pos[0] - slider.x
                         game.sfx_volume = max(0.0, min(1.0, relative_x / slider.width))
-                        update_volumes()
+                        update_volumes(game)
                 continue  # Skip other checks when in settings
             
             # Menu state
             if game.game_state == "menu":
                 if game.one_player_button and game.one_player_button.collidepoint(mouse_pos):
-                    play_sound(click_sound) # Play click sound
+                    play_sound(game, click_sound) # Play click sound
                     game.game_mode = "1P"
                     game.game_state = "difficulty"
                     print("Opening difficulty selection for 1 Player mode")
                 
                 elif game.two_players_button and game.two_players_button.collidepoint(mouse_pos):
-                    play_sound(click_sound) # Play click sound
+                    play_sound(game, click_sound) # Play click sound
                     game.game_mode = "2P"
                     game.game_state = "playing"
                     print("2 Players mode selected")
                     
                 elif game.stats_button and game.stats_button.collidepoint(mouse_pos):
-                    play_sound(click_sound) # Play click sound
+                    play_sound(game, click_sound) # Play click sound
                     game.game_state = "stats"
                     print("Statistics screen opened")
             
@@ -1392,11 +1417,11 @@ while running:
                 # Check if game over buttons are clicked
                 if game.game_over:
                     if game.restart_button_rect and game.restart_button_rect.collidepoint(mouse_pos):
-                        play_sound(click_sound) # Play click sound
+                        play_sound(game, click_sound) # Play click sound
                         game.reset_game()
                     
                     elif game.menu_button_rect and game.menu_button_rect.collidepoint(mouse_pos):
-                        play_sound(click_sound) # Play click sound
+                        play_sound(game, click_sound) # Play click sound
                         game.return_to_menu()
                 
                 # Regular game play (only if it's human's turn)
@@ -1410,9 +1435,9 @@ while running:
                         
                         # Play appropriate sound based on player
                         if game.current_player == "X":
-                            play_sound(beer_click_sound) # Sound for beer (X)
+                            play_sound(game, beer_click_sound) # Sound for beer (X)
                         else:
-                            play_sound(wine_click_sound) # Sound for wine (O)
+                            play_sound(game, wine_click_sound) # Sound for wine (O)
                             
                         print(f"Player {game.current_player} played at position {cell_index}")
                         print(f"Board: {game.board}")
@@ -1423,7 +1448,7 @@ while running:
                             game.game_over = True
                             game.winner = result
                             if not game.winner_recorded:
-                                record_game_result(game.winner)
+                                game_stats = record_game_result(game_stats, game.winner)
                                 game.winner_recorded = True
                                 trigger_fireworks(game)
                             print(f"Game Over! Winner: {game.winner}")
@@ -1432,32 +1457,32 @@ while running:
                             game.current_player = "O" if game.current_player == "X" else "X"
             elif game.game_state == "stats":
                 if game.back_button_rect and game.back_button_rect.collidepoint(mouse_pos):
-                    play_sound(click_sound) # Play click sound
+                    play_sound(game, click_sound) # Play click sound
                     game.game_state = "menu"
                     print("Returned to menu from stats")
                 
                 elif game.reset_stats_button_rect and game.reset_stats_button_rect.collidepoint(mouse_pos):
-                    play_sound(click_sound) # Play click sound
+                    play_sound(game, click_sound) # Play click sound
                     reset_stats()
                     print("Statistics has been reset")
             elif game.game_state == "difficulty":
                 if game.easy_button and game.easy_button.collidepoint(mouse_pos):
-                    play_sound(click_sound) # Play click sound
+                    play_sound(game, click_sound) # Play click sound
                     game.ai_difficulty = "easy"
                     game.game_state = "playing"
                     print("Easy difficulty selected")
                 elif game.medium_button and game.medium_button.collidepoint(mouse_pos):
-                    play_sound(click_sound) # Play click sound
+                    play_sound(game, click_sound) # Play click sound
                     game.ai_difficulty = "medium"
                     game.game_state = "playing"
                     print("Medium difficulty selected")
                 elif game.hard_button and game.hard_button.collidepoint(mouse_pos):
-                    play_sound(click_sound) # Play click sound
+                    play_sound(game, click_sound) # Play click sound
                     game.ai_difficulty = "hard"
                     game.game_state = "playing"
                     print("Hard difficulty selected")
                 elif game.difficulty_back_button and game.difficulty_back_button.collidepoint(mouse_pos):
-                    play_sound(click_sound) # Play click sound
+                    play_sound(game, click_sound) # Play click sound
                     game.game_state = "menu"
                     print("Returned to menu from difficulty selection")
         if event.type == pygame.MOUSEBUTTONUP:
@@ -1471,15 +1496,15 @@ while running:
                 # Update music volume based on mouse position
                 slider = game.settings_rects['music_slider']
                 relative_x = mouse_pos[0] - slider.x
-                music_volume = max(0.0, min(1.0, relative_x / slider.width))
-                update_volumes()
+                game.music_volume = max(0.0, min(1.0, relative_x / slider.width))
+                update_volumes(game)
                 
             elif game.dragging_sfx_slider and game.settings_rects.get('sfx_slider'):
                 # Update SFX volume based on mouse position
                 slider = game.settings_rects['sfx_slider']
                 relative_x = mouse_pos[0] - slider.x
-                sfx_volume = max(0.0, min(1.0, relative_x / slider.width))
-                update_volumes()
+                game.sfx_volume = max(0.0, min(1.0, relative_x / slider.width))
+                update_volumes(game)
                 
     # AI logic (runs every frame, but only acts when it's AI's turn)
     if (game.game_state == "playing" and 
@@ -1501,7 +1526,7 @@ while running:
                 game.board[ai_move] = game.ai_player
                 
                 # Play sound for AI move
-                play_sound(wine_click_sound)  # Sound for wine (O)
+                play_sound(game, wine_click_sound)  # Sound for wine (O)
                 
                 print(f"AI played at position {ai_move}")
                 print(f"Board: {game.board}")
@@ -1512,7 +1537,7 @@ while running:
                     game.game_over = True
                     game.winner = result
                     if not game.winner_recorded:
-                        record_game_result(game.winner)
+                        record_game_result(game_stats, game.winner)
                         game.winner_recorded = True
                         trigger_fireworks(game)
                     print(f"Game Over! Winner: {game.winner}")
@@ -1526,14 +1551,14 @@ while running:
     
     # Drawing based on game state
     if game.game_state == "menu":
-        game.one_player_button, game.two_players_button, game.stats_button = draw_menu()
+        game.one_player_button, game.two_players_button, game.stats_button = draw_menu(game)
         game.settings_button_rect = draw_settings_button()
     elif game.game_state == "stats":
-        game.back_button_rect, game.reset_stats_button_rect = draw_stats_screen()
+        game.back_button_rect, game.reset_stats_button_rect = draw_stats_screen(game)
         game.settings_button_rect = draw_settings_button()
         
     elif game.game_state == "difficulty":
-        game.easy_button, game.medium_button, game.hard_button = draw_difficulty_menu()
+        game.easy_button, game.medium_button, game.hard_button = draw_difficulty_menu(game)
         game.settings_button_rect = draw_settings_button()
 
     elif game.game_state == "playing":
@@ -1551,7 +1576,7 @@ while running:
         
     # Draw settings overlay on top of everything if open
     if game.settings_open:
-        game.settings_rects = draw_settings_menu()
+        game.settings_rects = draw_settings_menu(game)
     
     # Update display
     pygame.display.flip()
