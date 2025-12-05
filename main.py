@@ -1,3 +1,4 @@
+import math
 import pygame
 import random
 import os
@@ -149,6 +150,11 @@ class GameState:
         self.dragging_music_slider = False
         self.dragging_sfx_slider = False
         
+        # Animation state
+        self.fireworks = []  # List of active Firework objects
+        self.button_hover = None  # Currently hovered button
+        self.button_scales = {}  # Scale factors for buttons (for hover effect)
+        
         # button rects (updated each frame)
         self.restart_button_rect = None
         self.menu_button_rect = None
@@ -187,6 +193,93 @@ class GameState:
         self.game_mode = None
         self.game_state = "menu"
         print("Returned to menu")
+
+class Particle:
+    """
+    Particle class for fireworks and animations
+    """
+    def __init__(self, x, y, color, velocity_x, velocity_y):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.velocity_x = velocity_x
+        self.velocity_y = velocity_y
+        self.lifetime = random.randint(45, 90)  # Frames the particle will live
+        self.age = 0 # Current age in frames
+        self.size = random.randint(3, 8)  # Size of the particle
+        
+    def update(self):
+        """
+        Update particle position and age
+        """
+        self.x += self.velocity_x
+        self.y += self.velocity_y
+        self.velocity_y += 0.18 # Gravity effect
+        self.velocity_x *= 0.995 # Air resistance
+        self.age += 1
+        
+    def draw(self, screen):
+        """
+        Draw the particle on the screen
+        """
+        if self.age < self.lifetime:
+            # Fade out as particle ages
+            life_ratio = 1 - (self.age / self.lifetime)
+            size = max(1, int(self.size * life_ratio))
+            pygame.draw.circle(screen, self.color, (int(self.x), int(self.y)), size)
+    
+    def is_alive(self):
+        """
+        Check if the particle is still alive
+        """
+        return self.age < self.lifetime
+    
+class Firework:
+    """
+    Firework system that creates particles explosion
+    """
+    def __init__(self, x, y, color):
+        self.particles = []
+        self.create_explosion(x, y, color)
+        
+    def create_explosion(self, x, y, color):
+        """
+        Create explosion particles at (x, y) with given color
+        """
+        num_particles = random.randint(30, 60)
+        for _ in range(num_particles):
+            angle = random.uniform(0, 2 * math.pi)  # Random angle
+            speed = random.uniform(2, 8)  # Random speed
+            velocity_x = speed * math.cos(angle)
+            velocity_y = speed * math.sin(angle)
+            col = (
+                min(255, max(0, color[0] + random.randint(-20, 20))),
+                min(255, max(0, color[1] + random.randint(-20, 20))),
+                min(255, max(0, color[2] + random.randint(-20, 20))),
+            )
+            self.particles.append(Particle(x, y, col, velocity_x, velocity_y))
+            
+    def update(self):
+        """
+        Update all particles
+        """
+        for particle in self.particles:
+            particle.update()
+        # Remove dead particles
+        self.particles = [p for p in self.particles if p.is_alive()]
+        
+    def draw(self, surface):
+        """
+        Draw all particles
+        """
+        for particle in self.particles:
+            particle.draw(surface)
+            
+    def is_finished(self):
+        """
+        Check if all particles are dead
+        """
+        return len(self.particles) == 0 
 def play_sound(sound):
     """
     Play a sound if sounds are enabled
@@ -305,6 +398,100 @@ def draw_symbols(game):
                     (center_x + offset, center_y - offset),
                     (center_x - offset, center_y + offset),
                     LINE_WIDTH)
+
+def trigger_fireworks(game):
+    """
+    Trigger fireworks animation based on the winner
+    
+    Parameters:
+    - game: GameState object containing the winner
+    """
+    if game.winner == "X":
+        # Belgium wins - gold/yellow fireworks
+        colors = [ACCENT_GOLD, PRIMARY_GREEN]
+    elif game.winner == "O":
+        # France wins - red fireworks
+        colors = [ACCENT_RED, PRIMARY_BLUE]
+    else:
+        colors = [DARK_NAVY, LIGHT_GRAY]
+    
+    # Create multiple fireworks at random positions
+    for _ in range(5):  # Number of fireworks
+        x = random.randint(100, WINDOW_SIZE - 100)
+        y = random.randint(100, WINDOW_SIZE - 300)
+        color = random.choice(colors)
+        game.fireworks.append(Firework(x, y, color))
+        
+def update_and_draw_fireworks(game, screen):
+    """
+    Update and draw all active fireworks
+    
+    Parameters:
+    - game: GameState object containing the fireworks list
+    - screen: pygame display surface
+    """
+    for firework in game.fireworks:
+        firework.update()
+        firework.draw(screen)
+    
+    # Remove finished fireworks
+    game.fireworks = [fw for fw in game.fireworks if not fw.is_finished()]
+    
+def draw_animated_button(game, rect, color, text, text_color, mouse_pos, button_id):
+    """
+    Draw a button with hover animation effect
+    
+    Parameters:
+    - game: GameState object containing button scales
+    - rect: pygame.Rect for button position and size
+    - color: tuple RGB color for button background
+    - text: str, text to display on button
+    - text_color: tuple RGB color for text
+    - mouse_pos: tuple (x, y) current mouse position
+    - button_id: str, unique identifier for the button
+    
+    Returns:
+    - pygame.Rect: updated rect of the button (for click detection)
+    """
+    # Check if mouse is hovering over button
+    is_hovering = rect.collidepoint(mouse_pos) if mouse_pos else False
+    
+    # Initialize scale if not present
+    if button_id not in game.button_scales:
+        game.button_scales[button_id] = 1.0
+        
+    # Decide target scale first
+    target_scale = 1.05 if is_hovering else 1.0
+    
+    # Smoothly interpolate scale
+    current = game.button_scales[button_id]
+    smoothing = 0.16  # Adjust for speed of scaling
+    game.button_scales[button_id] = current + (target_scale - current) * smoothing
+    scale = game.button_scales[button_id]
+    
+    # Compute scaled rect around the same center
+    center = rect.center
+    scaled_width = max(1, int(rect.width * scale))
+    scaled_height = max(1, int(rect.height * scale))
+    scaled_rect = pygame.Rect(0, 0, scaled_width, scaled_height)
+    scaled_rect.center = center
+    
+    # Adjust color if hovering (make slightly brighter)
+    if is_hovering:
+        hover_color = tuple(min(255, int(c * 1.1)) for c in color)
+    else:
+        hover_color = color
+        
+    # Draw button background and border
+    pygame.draw.rect(screen, hover_color, scaled_rect, border_radius=12)
+    pygame.draw.rect(screen, DARK_NAVY, scaled_rect, 3, border_radius=12)  # Border
+    
+    # Draw text centered in scaled rect
+    text_surface = font_small.render(text, True, text_color)
+    text_rect = text_surface.get_rect(center=scaled_rect.center)
+    screen.blit(text_surface, text_rect)
+    
+    return scaled_rect
 
 def check_winner(board):
     """
@@ -662,31 +849,6 @@ def draw_difficulty_menu():
     screen.blit(hard_text, hard_text_rect)
     
     return easy_button, medium_button, hard_button
-# def reset_game():
-#     """
-#     Reset the game to initial state (keep same mode)
-#     """
-#     global board, current_player, game_over, winner, winner_recorded
-#     board = [""] * 9
-#     current_player = "X"
-#     game_over = False
-#     winner = None
-#     winner_recorded = False
-#     print("Game reset!")
-
-# def return_to_menu():
-#     """
-#     Return to main menu and reset everything
-#     """
-#     global board, current_player, game_over, winner, game_mode, game_state
-#     board = [""] * 9
-#     current_player = "X"
-#     game_over = False
-#     winner = None
-#     winner_recorded = False
-#     game_mode = None
-#     game_state = "menu"
-#     print("Returned to menu")
     
 def draw_settings_button():
     """
@@ -1071,7 +1233,7 @@ def draw_stats_screen():
         screen.blit(date_text, (80, y_offset))
     
     # Right side: Pie chart
-    pie_center_x = 420
+    pie_center_x = 440
     pie_center_y = 280
     pie_radius = 80
     
@@ -1081,7 +1243,7 @@ def draw_stats_screen():
     game_stats['draws'])
     
     # Legend for pie chart (vertical layout)
-    legend_x = 350
+    legend_x = 370
     legend_y = 385
     legend_font = pygame.font.Font(None, 28)
     letter_spacing = 30
@@ -1263,6 +1425,7 @@ while running:
                             if not game.winner_recorded:
                                 record_game_result(game.winner)
                                 game.winner_recorded = True
+                                trigger_fireworks(game)
                             print(f"Game Over! Winner: {game.winner}")
                         else:
                             # Switch player
@@ -1351,6 +1514,7 @@ while running:
                     if not game.winner_recorded:
                         record_game_result(game.winner)
                         game.winner_recorded = True
+                        trigger_fireworks(game)
                     print(f"Game Over! Winner: {game.winner}")
                 else:
                     # Switch back to human player
@@ -1381,6 +1545,10 @@ while running:
         if game.game_over:
             game.restart_button_rect, game.menu_button_rect = draw_winner_message(game)
     
+    # Draw fireworks on top of everything (except settings)
+    if not game.settings_open:
+        update_and_draw_fireworks(game, screen)
+        
     # Draw settings overlay on top of everything if open
     if game.settings_open:
         game.settings_rects = draw_settings_menu()
